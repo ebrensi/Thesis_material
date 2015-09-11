@@ -1,0 +1,874 @@
+\part{********************}
+ \clearpage
+\section{Junk}
+\index{thick-restart}\index{Krylov-Schur}\label{sec:thick_theory} 
+\yinipar{T}he thick-restart was introduced by Wu  in \cite{dynamicthick}  and \cite{wu1999thick} as an alternative to Lehoucq and Sorensen's implicit restart applied to Krylov methods for finding eigenvalues of very large matrices or matrix-pencils.  The reason for a restart in an eigenvalue method is to deal with storage limitations on the number of basis vectors we can hold, and/or computation cost of orthogonalizing each iterate against $n$ previous vectors on the $n$-th step.   Suppose our memory limits us to storing $n$ vectors, or $\bigO{nN}$ is the longest we can wait to orthogonalize a new basis vector.   Then we must stop the process and throw out some vectors every time we fill $n$ positions.  More precisely, we transform the vector basis $V$ into another basis $\mat{Y & Y^\perp}$ such that we can throw out $Y^\perp$ in the so-called deflation phase, and then continue, (re-starting) with $Y$, until we fill up $n$ positions again.   The subspace $Y^\perp$ that we throw out typically corresponds to unconverged eigen-information, or perhaps we keep certain nearly-conveged approximate eigen-information in $Y$ that will separate the remaining space and make certain unconverged eigenvalues converge faster.   We continue to refine our set of $n$ vectors, cycle after restarted cycle, until we have the set of $n$ vectors we want.  
+
+There are several restart methods for eigenvalue finding that achieve the same goal of refining one limited collection of vectors until they converge into a desired set. 
+\smallskip
+
+The restart for model reduction serves a different purpose, although there are methods \cite{jaimoukha1997implicitMOR} and notable \cite{grimme1996restart} that construct a ROM using such a process of refining a projection subspace.  The idea has usually been to throw out bad poles of an implicitly projected ROM, refining the projection subspace until there are no poles with positive $\Re$-part or some other undesirable trait.   The problem with this is that matching $l$ moments of a model transfer function $\tf(s)=\CC^T(I-(s-\sigma)\H)^{-1}\RR$ about an interpolation point $\sigma$ via projection on to a subspace $V$ requires that 
+\[
+\krylov{l}{\H}{\RR} \subseteq \spn V.
+\] 
+If we throw out basis vectors of $\krylov{l}{\H}{\RR}$ then we lose moment-matching.  Suppose $\Y \subset \krylov{l}{\H}{\RR}$ remains after deflation of a restart cycle.  The subspace  $\spn\mat{Y&V^\prime}$ that we have after the expansion phase of a typical (implicit or explicit) restart  with deflated Ritz-vectors is known to be  Krylov subspace, but with different starting vectors (not $\RR$).   It has been shown that ROMs via implicit-projection on to such modified Krylov subspaces can still be good without guaranteed moment matching, but apparently the quality of such ROMs is not reliable.     
+
+
+Our restarted ROM method can described as invariant-subspace recycling.   We construct bases for Krylov subspaces at a different shift on every cycle.  The thick-restart mechanism allows us to hold on to a growing basis $Y$ of known converged $(\A,\E)$-invariant subspace, and continue orthogonalizing new basis vectors against $Y$.  Assuming $\Y_0 = \emptyset$, the general process is 
+\begin{enumerate}
+\item For $j=1,2,...,\np$, use Krylov-operator $\H_j = (\A-\sigma_j \E)^{-1}\E$ and operand $\RR_j= (\sigma_j \E - \A)^{-1}\BB$. 
+\begin{enumerate}
+\item \textbf{Expand} $Y_{j-1}$ into basis $\mat{Y_{j-1} & V_j}$ for $\Y_{j-1} \cup \krylov{l_j}{\H_j}{\RR_j}$ via thick-restart Arnoldi process.  
+
+\item  The computed quantities $\rrimp =\c{\Vt_j} \RR_j$ and $\Himp = \c{\Vt_j} \H_j \Vt_j$ can be used to \textbf{observe} the ROM transfer function 
+\[
+\tfimp_j(s)=\CC^T \Vt_j \big( I - (s-\sigma_j) \Himp \big)^{-1} \rrimp
+\]
+ via implicit-projection on to the basis $\Vt_j = \mat{Y_{j-1} & V_j}$.
+
+\item \textbf{Deflate} $\mat{Y_{j-1} & V_j}$ into $\mat{Y_{j-1} &Y^\prime_j}$, where       $Y^\prime_j\subset\spn V_j$ is newly converged $(\A,\E)$-invariant subspace, and set $Y_j = \mat{Y_{j-1} &Y^\prime_j}$. 
+\end{enumerate}
+
+\item Now we have a set of orthogonal blocks $\{ V_1, V_2, ...,V_\np\}$ (but not orthogonal to each other) such that 
+\[
+\spn \mat{V_1& V_2& \cdots&V_\np} = \bigcup_{j=1}^\np \krylov{l_j}{\H_j}{\RR_j}.
+\] 
+
+Let $\widehat{V} = \spn\mat{V_1& V_2& \cdots&V_\np}\in\R^{N\times n}$  (most-likely split into $\Re$ and $\Im$ parts and re-orthogonalized). The explicitly-projected ROM realization is then 
+\[
+\A_n = \widehat{V}^T \A \widehat{V},\quad 
+\E_n = \widehat{V}^T \E \widehat{V}, \quad
+\BB_n = \widehat{V}^T \BB,\quad
+\CC_n = \widehat{V}^T \CC,
+\]
+and it has transfer function 
+\[
+\tfexp(s) = \CC_n^T (\A_n - s \E_n )^{-1} \BB_n. 
+\]
+\end{enumerate}
+
+
+
+
+\paragraph{Why restart a Krylov-subspace projection ROM method?}
+Our primary reason for thick-restarts is to save cost by not doing full orthogonalization of basis vectors.  Rational-interpolation produces the basis for the union of multiple Krylov subspaces, so we can construct them separately.  We wish to reduce computational redundancy in constructing their bases, and reduce or eliminate linear dependence.  
+
+ Since we are likely to be using complex interpolation points (\S\ref{sec:complex_points}), we will have to split the basis into $\Re$ and $\Im$ parts and re-orthogonalize the resulting real basis anyway, so making all of the constituent bases orthogonal to one-another is unnecessary.    Also, for that matter we can further reduce orthogonalization costs by using the alternate inner-product described in \S\ref{sec:eqreal}.
+
+\paragraph{Why a restarted rational Krylov method might mean smaller ROM size}
+The obvious advantage to a restarted method is lower orthogonalization cost and fewer basis vectors to store.  It might imply smaller ROMs as well.
+Krylov-subspace projection methods for MOR are developed out of eigenvalue methods, the goal of which  is to determine some eigenvalues of a matrix or a matrix-pencil as fast as possible, usually ones in a particular region of the complex-plane.   To that end, we choose the interpolation-point $\sigma$ somewhere near the suspected location of the desired eigenvalues, and perform Krylov iterations.  Of course it depends on which eigen-directions are strong in the start vector (or general start-space $\spn \{\RR\}$) but in general we will observe that eigenvalues of $(\A,\E)$ near $\sigma$ converge first, and with further iterations more eigenvalues converge, typically in sequential order of their distance from $\sigma$.   Well-separated eigenvalues near $\sigma$ will converge faster than those located in a cluster.   For example if $\sigma$ is located far away from all of the eigenvalues, the entire spectrum is a cluster relative to $\sigma$.  All of the eigenvalues  will converge at more-or-less the same slow rate.  As a realistic example, we may observe no convergence for $50$ or more iterations; suppose $50$  eigenvalues converge on the $51$-st iteration of a particular Krylov cycle.      If had removed removed a few  known eigenvalues from the search by pre-loading their directions in $V$, the remaining cluster would be more separated.  We might see faster and more sequential convergence due to better separation of the eigenvalues.  In MOR this gives us a better chance to optimize the ROM.  Suppose that of the $50$ poles that simultaneously converged on the $51$-st  iteration,  only $2$ had significant pole-weight; this would mean that we wasted several iterations obtaining useless eigen-information.  With more separated convergence of eigenvalues,  by monitoring total converged pole-weight or moment-error we can more easily determine when further iterations are no longer yielding significant information, and it is time to stop or move to a new interpolation-point.   This implies a possibly smaller ROM as well, given an adaptive method with shift changes based on estimated regions of high pole-density and using these local-convergence based stopping criteria.
+
+Changing $\sigma$ changes the order in which the eigenvalues converge because their proximities to $\sigma$ change.   The closer $\sigma_2$ is to $\sigma_1$, the more similar the sequences of converging eigenvalues.    If we run an Arnoldi process starting at $\sigma_2$ after having done that with $\sigma_1$, and they are near each other, we can expect to see many of the same eigenvalues converge after a number of iterations.    If  $\sigma_1$ and $\sigma_2$ are far apart, there may not be a lot of common eigenvalues for the small number of iterations we perform.       
+
+
+\subsubsection{Thick-restart cycle}
+ Some of the formalism here is adapted from Stewart's Krylov-Schur method of \cite{stewart2002krylov,stewart2002addendum}, which is a generalization of Wu's thick-restart.   
+
+Suppose we want to construct a basis $V$ for  $\krylov{l}{\H}{\RR}$ minus a previously discovered approximately $(\A,\E)$-invariant subspace $\Y$.
+
+Take $Y=\mat{y_1 & y_2 & \cdots & y_\ell}\in\C^{N\times \ell}$ as a basis for $\Y$, and  $\Yh=\mat{\yh_1 & \yh_2 &\cdots&\yh_\nYh}\in\C^{N\times \nYh}$ the basis for the $\nYh$-dimensional residual-space so that we have a block-Krylov relation
+\begin{equation}
+\begin{aligned}
+\H Y &= \mat{Y & \Yh}\mat{U\\  B}\\
+&= Y U +  \Yh B.
+\label{eq:deflated_decomp}
+\end{aligned}
+\end{equation}
+The coefficient matrix $B=\mat{b_1&b_2&\cdots&b_\ell}\in\C^{\nYh \times \ell}$ is such that the residual 
+\begin{equation}
+\H y_j - Y u_j =  \Yh b_j
+\label{eq:krylov_Schur_residual}
+\end{equation}
+ of approximate Schur-vector $y_j$  is a linear combination of columns of $\Yh$.
+We assume $\mat{Y & \Yh}$, which is called the basis of the decomposition, has orthogonal columns.  $Y$ is orthonormal, but columns of  $\Yh$ are not normalized in general.   When the residual $\Yh B$  is of rank-1 it is usually written as an outer-product $y\c{b}$, but we do away with the $\c{\cdot}$ notation for the general residual. 
+
+  The reader should note that, although the $N\times\nYh$ residual basis matrix $\Yh$ can be quite large, we only need to know (and store) its representative magnitude  in some form.  That is because we are primarily interested in $\Yh$ and other residuals for determining residual-norms.  For example, one residual norm associated with \eqref{eq:krylov_Schur_residual} is 
+\begin{equation}
+\| \H y_j - Y u_j \|_2 = \|\Yh b_j \|_2 \leq \| \Yh \|_F \| b_j\|_2. 
+\label{eq:krylov_Schur_residual_norm}
+\end{equation}
+
+
+Even if we are doing SISO model reduction, we can expect the residual $\Yh$ to be of of rank greater than one in general, because every thick-restart cycle produces a space with a different residual vector. That is because we start with a new operator $\H_j$ and operand $\Rr_j$ on the $j$-th restart cycle.   Then on the $j$-th restart we potentially have a residual of rank-$j$.  For MIMO models the rank $\nYh$ of the residual is up to $j m$ on the $j$-th  cycle, where $m=\dim \RR_j = \dim \BB$ (the input dimension). 
+
+  The subspace $\Y$ is likely a deflated Krylov subspace, or  perhaps orthogonalized Ritz-vectors obtained from a dominant-pole finding algorithm such as $\cite{DPA}$. 
+The thick-restart method (sometimes called \emph{Krylov-Spectral}) can be regarded as a specific case of Krylov-Schur where $Y$ is a basis of Ritz-vectors with orthogonal residual  $\Yh$ that we plan to continue iterating with.   The thick-restart proper, as introduced in \cite{dynamicthick} was intended for a Hermitian operator  $\H$ so its Ritz vectors already form an orthogonal set.   \textbf{Our thick-restart for MOR is different from Wu and Simon's Thick-Restart, and different from Stewart's Krylov-Schur method (for finding eigenvalues) in that we start the expansion phase with arbitrary vectors rather than the residual vectors from  another Krylov process.}  There may be other applications for using an arbitrary start vector or block, but for model order-reduction it allows us to express the Krylov operand $\RR$ in terms of the expanded basis $\Vt=\mat{Y&V}$.  Then we can (relatively) cheaply form pole location and weight distributions (\S\ref{sec:pole_dominance}) of intermediate ROMs while the method progresses.         
+     Typically the residual $\Yh$ is used for  continuing iterations but we are going to resume building a basis with $\RR$.   
+
+We resume basis construction $\mat{Y & v_1& v_2 &\cdots}$ with start block  $\RR\in\C^{N\times \nin}$ (made orthogonal to $\Y$).  We set the initial ``residual''
+\begin{equation}
+R_0 := (I-Y\c{Y})\RR,
+\label{eq:new_start}
+\end{equation}
+which sets up $\RR = \mat{Y & V}  \rrimp$.  
+
+Performing $k$ iterations of thick-start Arnoldi with operator $\H$ on start block $\RR$ expands \eqref{eq:thick_decomp1} into 
+\begin{equation}
+\begin{aligned}
+\H \mat{Y &V} &= \mat{Y & \Yh&V & R_k }
+\mat{U & G \\B& 0  \\   0&\Himp^\prime\\ 0&F}\\
+&= \mat{Y & V }
+\mat{U & G \\ 0&\Himp^\prime} +   \mat{\Yh & R_k}\mat{B&0\\0&F} \\
+&= \mat{Y & V }
+\mat{U & G \\ 0&\Himp^\prime} +  \mat{\Yh B  &  R_k F}, 
+\end{aligned}
+\label{eq:thick_decomp1}
+\end{equation}
+where $F =\mat{f_1&f_2&\cdots&f_k}\in\C^{\nin\times k}$, so that $R_k f_j$ is the residual vector for the $j$-th column of that block.  
+
+Since linear dependence might have been deflated out during iterations, we can expect $\dim R_k =  \nin_c \leq \nin$ in general, where $\nin_c$ is the dimension of the current residual,  called $\widehat{V}_{defl}$ in \cite{freund2000b}.  The paper that introduced band-Krylov processes for MOR was \cite{AliagaMIMO}, and we refer the reader to \cite{AliagaMIMO} for a more in-depth discussion.  If we use the band-Arnoldi procedure of \cite{freund2000b,AN} with exact deflation,
+\begin{equation}
+F = E_k^{(\nin_c)} =  \mat{0&0&\cdots&I} \in \R^{\nin_c \times k}
+\label{eq:generalized_arnoldi_resid_coeffs}
+\end{equation}
+where the last $\nin_c$ positions are occupied by the identity matrix $I\in\R^{\nin_c^2}$.
+ For the single-vector iteration ($\nin=1$),  we see that \eqref{eq:generalized_arnoldi_resid_coeffs} is the the familiar $F=e_k^T = \mat{0&0&\cdots&1}$.
+
+\paragraph{Thick-Arnoldi coefficient-matrix is not the Rayleigh-quotient (but that is ok)}
+Assuming $U$ is upper-triangular, the matrix 
+\begin{equation}
+\mat{U & G \\ 0&\Himp^\prime}
+\label{eq:thick_arnoldi_matrix}
+\end{equation}
+of orthogonalization-coefficients in \eqref{eq:thick_decomp1} has the form 
+\begin{equation}
+\mat{u&u&u&g&g&g&g\\%
+        &u&u&g&g&g&g\\
+	  &&u&g&g&g&g\\
+	 &&&h&h&h&h\\
+	 &&&h&h&h&h\\
+	 &&&&h&h&h\\
+	&&&&&h&h
+}
+\tag{\ref{eq:thick_arnoldi_matrix}*}
+\end{equation}
+for $\ell = \dim \Y = 3$ and $k=\dim V =4$ (of a SISO model). It \eqref{eq:thick_arnoldi_matrix}
+ is used by standard Krylov methods as the Rayleigh-quotient of $\H$ with respect to the constructed basis, which in our case is $\Vt=\mat{Y&V}$ and spans $\Y\cup\krylov{k}{\H}{\RR}$.   However \eqref{eq:thick_arnoldi_matrix} is not a proper Rayleigh-quotient because $\mat{Y&V}$ is not orthogonal to $\Yh B$.  Specifically, $V$ is not orthogonal to $\Yh$ because we started construction of $V$ with \eqref{eq:new_start} rather than $\Yh$. 
+
+
+We could force \eqref{eq:thick_arnoldi_matrix} to be the Rayleigh-quotient by orthogonalizing $V$  against $\mat{Y&\Yh}$ during construction  rather than just $Y$, even though $\Yh$ is not included in the resulting basis $\mat{Y&V}$.  Then we would have $\spn \mat{Y&V} =\Y \cup \krylov{k}{\H}{\Rr}\setminus \spn\{\Yh\}$.  Unfortunately that means $\krylov{k}{\H}{\Rr} \nsubseteq \spn \mat{Y&V}$, so a ROM constructed via projection on to $\mat{Y&V}$ might not have moment matching properties.  It is not obvious whether $\spn\{\Yh\}$ and $\krylov{k}{\H}{\RR}$  share any common subspace, or whether their intersection contains information that would make the model much different if it were absent.  We could overlook this discrepancy for intermediate ROM analysis, and add $\Yh$ back to the basis used for explicit projection.   For now we will assume that $V\Yh\neq 0$ (i.e. that we do not orthogonalize $V$ against $\Yh$).
+
+
+
+
+
+Although we do not necessarily need it, it is helpful to see what the actual Rayleigh-quotient  looks like.  Assume that $\mat{Y&\Yh}$ and $\mat{V&R_k}$ are orthogonal bases, and that $\mat{V& R_k}$ is orthogonal to $Y$ but not to $\Yh$.   We left multiply \eqref{eq:thick_decomp1} by $\c{\Vt} = \mat{\c{Y}\\ \c{V}}$ to obtain
+\begin{align}
+\Himp=\c{\Vt} \H \Vt &= \mat{U & G \\ 0&\Himp^\prime} +    \mat{\c{Y} \\ \c{V} }\mat{\Yh B  &  R_k F} \nonumber\\
+&= \mat{U & G \\ 0&\Himp^\prime} +\mat{0&0\\ \c{V}\Yh B&0}\nonumber\\
+&= \mat{U & G \\ \Yh^\prime B&\Himp^\prime},
+\label{eq:thick_rayleigh}
+\end{align}
+ where $y^\prime=\c{V}\Yh$.  \eqref{eq:thick_rayleigh} has the form 
+\begin{equation}
+\mat{u&u&u&g&g&g\\%
+        &u&u&g&g&g\\
+	  &&u&g&g&g\\
+	 y&y&y&h&h&h\\
+	 y&y&y&h&h&h\\
+	 y&y&y&&h&h\\
+	y&y&y&&&h&
+}
+\tag{\ref{eq:thick_rayleigh}*}
+\end{equation} 
+
+ If we want to work with \eqref{eq:thick_rayleigh} we must explicitly compute  $\Yh^\prime B= \c{V}\Yh B$ and add it to \eqref{eq:thick_arnoldi_matrix} as part of our process.   The extra expense is the same as if we performed the standard Krylov-Schur expansion, but  with $\mat{Y & \Yh}$ as the thick-restart basis instead of just $Y$. For that expense it may be preferable to just construct $V$ to be orthogonal to $\Yh$, as mentioned.
+
+
+\paragraph{Using \eqref{eq:thick_arnoldi_matrix} vs \eqref{eq:thick_rayleigh} for eigenvalue decomposition}
+How does the presence of $\Yh^\prime B$ in the Rayleigh-quotient affect Ritz vectors and values? We will look at Arnoldi-Ritz expressions obtained from the eigen-decompositions of \eqref{eq:thick_arnoldi_matrix}, and  of \eqref{eq:thick_rayleigh}, and show that \eqref{eq:thick_arnoldi_matrix} is better for computing residual errors of Ritz-pairs.
+
+
+For that implied by  the Rayleigh-quotient \eqref{eq:thick_rayleigh},
+   take an eigenvalue  decomposition $\Himp W = W\Lambda$ of \eqref{eq:thick_rayleigh}, expressed in blocks as 
+\begin{equation}
+\mat{U & G \\  \Yh^\prime B&\Himp^\prime}\mat{W_{11}&W_{12}\\W_{21}&W_{22}} 
+=
+\mat{W_{11}&W_{12}\\W_{21}&W_{22}} 
+\mat{\Lambda_1 &\\&\Lambda_2}.
+\label{eq:rayleigh_eigen}
+\end{equation}
+
+Re-write \eqref{eq:thick_decomp1} as
+\begin{align*}
+\H \V &= \V \left(\Himp-\mat{ 0& 0 \\ \Yh^\prime B&0}\right)
++  \mat{\Yh & R_k}\mat{B&\\& F} \label{eq:thick_decomp2}
+\end{align*}
+and right-multiply it by $W$,  giving us the Krylov-Ritz relation
+\begin{align*}
+\H \Vt W 
+&= \Vt W \Lambda- \left( \Vt \mat{ 0&0  \\ \c{V}\Yh B&0} 
+-  \mat{\Yh & R_k} \mat{B&\\&F} \right) 
+\mat{W_{11}&W_{12}\\W_{21}&W_{22}} \nonumber \\
+%
+&= \Vt W \Lambda- 
+\left( \mat{Y&V} \mat{0 & 0 \\ \c{V}\Yh B&0}
+\mat{W_{11}&W_{12}\\W_{21}&W_{22}}
+-  \mat{\Yh B W_{11} + R_k F W_{21} &\Yh B W_{12} + R_k F W_{22}} 
+	\right) \nonumber \\
+&= \Vt W \Lambda- 
+\bigg( \mat{V \c{V}\Yh B W_{11}&V \c{V}\Yh B W_{12}}
+-  \mat{\Yh B W_{11} + R_k F W_{21} &\Yh B W_{12} + R_k F W_{22}}    \bigg) \\
+%
+&= \Vt W \Lambda+  
+\mat{(I -V \c{V})\Yh B W_{11}+ R_k F W_{21} 
+	& (I-V \c{V})\Yh B W_{12}+ R_k F W_{22}}\\
+&= \Vt W \Lambda+ \mat{(I -V \c{V})\Yh B  & R_k F } W
+\end{align*}
+
+Then for Ritz-vectors $Z=\Vt W$ where $(W,\Lambda)$ is the eigen-decomposition of Rayleigh-quotient \eqref{eq:thick_rayleigh}, the residual is
+\begin{align}
+\H Z - Z \Lambda =  \mat{(I -V \c{V})\Yh B  & R_k F } W,
+\end{align}
+which may be of use to somebody.
+
+\bigskip
+If, instead of taking the eigen-decomposition of the Rayleigh-quotient \eqref{eq:thick_rayleigh}, we factor \eqref{eq:thick_arnoldi_matrix}, as
+\begin{equation}
+\mat{U & G \\ &\Himp^\prime}\mat{\tilde{W}_{11}&\tilde{W}_{12}\\&\tilde{W}_{22}} 
+=
+\mat{\tilde{W}_{11}&\tilde{W}_{12}\\&\tilde{W}_{22}} 
+\mat{U_{\ell\ell} &\\&\Lambda}
+\label{thick_eig_decomp}
+\end{equation}
+(which is different from \eqref{eq:rayleigh_eigen} in general) and right multiply \eqref{eq:thick_decomp1}  by  eigenbasis $\tilde{W}= \mat{\tilde{W}_{11}&\tilde{W}_{12}\\&\tilde{W}_{22}}$, we get 
+\[
+\H \mat{\tilde{Z}_1 & \tilde{Z}_2 } = 
+\mat{\tilde{Z}_1 & \tilde{Z}_2 }\mat{U_{\ell\ell} &\\&\Lambda} 
++  \mat{\Yh B  &  R_k F}\mat{\tilde{W}_{11}&\tilde{W}_{12}\\&\tilde{W}_{22}}. 
+\]
+
+In this case we have  
+ \begin{equation*}
+\H \tilde{Z}_1 =  \tilde{Z}_1\Lambda_1+ \Yh B \tilde{W}_{11} 
+\end{equation*}
+and 
+\begin{equation*}
+\H \tilde{Z}_2 =  \tilde{Z}_2 \Lambda_2+ \Yh B \tilde{W}_{12} + R_k F\tilde{W}_{22}
+%\label{eq:thick_krylov_ritz1}
+\end{equation*}
+
+Then the block-Ritz-residual 
+\begin{equation}
+\H \tilde{Z}_2 - \tilde{Z}_2 \lambda_2 
+=  \mat{\Yh & R_k}\mat{B&\\&F} \mat{\tilde{W}_{12} \\\tilde{W}_{22}}
+\end{equation}
+can be estimated in norm and used to determine convergence of Ritz-vectors.
+
+\subsubsection{ROM implied by one thick-restart cycle}
+The aforementioned eigen-decomposition can be used to look at the order-$\kappa$ (where $\kappa=\ell+k$) ROM transfer function via implicit-projection on to $\spn \Vt=\Y\cup\krylov{k}{\H}{\RR}$, which is defined as
+\begin{equation}
+\tfimp(s) = \CC^T \mat{Y&V} \big(I - (s-\sigma)\Himp\big)^{-1} \rrimp.
+\label{eq:thick_ROM}
+\end{equation}
+$\Himp$ and  $\rrimp:=\c{\mat{Y&V}}\RR$ were computed as part of the expansion phase that produced \eqref{eq:thick_decomp1}, but we must explicitly compute  (norms of the columns of) $\CC^T V$, which can cost up to $\bigO{N k \nout}$ where $\nout = \dim\CC$.
+
+
+
+\paragraph{Eigen-decomposition of $\Himp$ yields ROM pole weight distribution}
+Take an eigen-decomposition \eqref{eq:rayleigh_eigen}  or  \eqref{thick_eig_decomp} and call it  $(W,\Lambda)$.  Let $Z = \mat{Z_1 & Z_2} =\mat{Y&V} W$ be the basis of long Ritz-vectors, where $Z_1$ and $Z_2$ are the Ritz-vector bases associated with $\Y$ and $V$ respectively.    Poles $\mu_j$ of \eqref{eq:thick_ROM} correspond to eigenvalues $\lambda_j \in \Lambda$ with  
+\[
+\mu_j=\sigma+1/\lambda_j.
+\]  
+
+The weight (sometimes called dominance) of pole $\mu_j$ in the pole-residue expansion of \eqref{eq:thick_ROM}, is   
+\begin{equation}
+|\gamma_j| =  \nrm{}{\delta_j} \|f_j\|\|g_j\|,
+\label{eq:thick_pole_wt}
+\end{equation}
+where $f_j$ and $g_j$ are the $j$-th column of 
+\[
+\CC^T Z = \mat{f_1 & f_2 &\cdots&f_{\kappa}}, \quad\text{and}\quad
+(W^{-1}\rrimp)^T = \mat{g_1 & g_2 &\cdots&g_{\kappa}},
+\]
+and
+\begin{align}
+\nrm{\infty}{\delta_j(i\omega)}&= \begin{cases}
+\dfrac{| \sigma-\mu_j|}{\min\big\{|\mu_j-\omega_1|,\  |\mu_j -\omega_2|,\  |\Re(\mu_j)|  \big\}},   & \mu_j \neq \infty\\
+1, & \mu_j = \infty
+\end{cases}
+\label{eq:ROM_pole_wt}
+\end{align}
+is the factor representing $\mu_j$'s proximity to $i[\omega_1,\omega_2]$ on the $\Im$-axis.
+ The apparent dependence of \eqref{eq:ROM_pole_wt} on the shift/interpolation-point $\sigma$ is misleading.  When taken as a whole, a pole's weight \eqref{eq:thick_pole_wt} does not depend on $\sigma$.    For a more detailed discussion of pole-weight, see \S\ref{sec:pole_dominance}.
+
+
+ 
+
+Note that $\CC^T Z  = \CC^T \mat{Z_1 & Z_2}$, where $\CC^T Z_1$ does not need to be re-computed every cycle.  We can re-use it from cycle to cycle, appending $\CC^T z_{\ell+1}$ when a new Ritz-vector $z_{\ell+1}$ is locked.  In that way, poles $\mu_1,\mu_2,\ldots,\mu_\ell$, and their weights, are locked in  \eqref{eq:thick_ROM} and every ROM of future restart cycles. 
+
+   The factors $\|f_j\|$ and $\|g_j\|$   represent $\mu_j$'s weight with respect to filtering by the output and input interfaces of the ROM.  The pole $\mu_j$'s weight \eqref{eq:thick_pole_wt} (aka dominance) is a converging quantity,  like $\mu_j$ itself.  Analysis of very-low-order models identifies emerging regions of pole-density of the transfer function.  It is not clear whether convergence of poles implies convergence of near-by zeros as well, although moment matching about $\sigma$ certainly implies that near $\sigma$.  
+
+
+The total system weight of \eqref{eq:thick_ROM} is $\sum | \gamma_j |$, and is itself a converging quantity.  It is a sort of transfer function norm $\|\tfimp(s)\|$.
+
+\subsubsection{Deflating a ROM thick-restart cycle}
+After a cycle of the process, we want to extract a subset (in span) of the basis we constructed, and append that to the  thick-start basis for the next cycle.   A marked difference between thick-restart/Krylov-Schur for the eigenvalue problem and for our rational-interpolation method for MOR is that we will use a different operator $\H_2$ and operand $\RR_2$ on the next cycle, so the eigenvalues of the decomposition will need to be shifted.   We will address that.
+ 
+\medskip
+By performing $k$ iterations of the Arnoldi process with $\H$ on $\RR$, and enforcing orthogonality with thick-start basis $Y$ for some $\ell$-dimensional subspace $\Y$  such that
+ \begin{equation}
+\H Y = Y U +  \Yh B
+\tag{\ref{eq:deflated_decomp}},
+\end{equation}
+we expanded \eqref{eq:deflated_decomp} into
+\begin{equation}
+\H \mat{Y &V} =  \mat{Y & V }
+\mat{U & G \\ &\Himp^\prime} +  \mat{\Yh B  &  R_k F} ,
+\tag{\ref{eq:thick_decomp1}}
+\end{equation}
+where the $(\ell+k)\times (\ell+k)$ matrix $\mat{U & G \\ &\Himp^\prime}$ has the form 
+\begin{equation}
+\mat{u&u&u&g&g&g&g\\%
+        &u&u&g&g&g&g\\
+	  &&u&g&g&g&g\\
+	 &&&h&h&h&h\\
+	 &&&h&h&h&h\\
+	 &&&&h&h&h\\
+	&&&&&h&h
+}
+\tag{\ref{eq:thick_arnoldi_matrix}*}
+\end{equation}
+for a SISO ROM with $\ell=3$ and $k=4$.
+
+
+
+The mechanism of deflation in this scheme is to reduce \eqref{eq:thick_decomp1} to a new orthonormal Krylov-Schur relation 
+ \begin{equation}
+\H_2 \widehat{Y} \approx \widehat{Y} \widehat{U}
+\label{eq:deflated_decomp2}
+\end{equation}
+where 
+\begin{equation}
+\widehat{Y} = \mat{Y& Y^\prime}, \qquad \qquad
+\widehat{U} = \mat{U & * \\  & U^\prime}
+\end{equation}
+ represent the enlarged subspace $\widehat{\Y}$ that we will use as the thick-restart basis for the next cycle. The basis for the  subspace $\widehat{\Y}$  will contain the same vectors $Y$, appended with basis $Y^\prime$ for 
+\[
+\Y^\prime\subseteq\spn V = \krylov{k}{\H}{\Rr}\setminus \Y,
+\]
+ most likely consisting of newly converged Schur-vectors. 
+
+\begin{comment}%%%%%%%%%%%
+
+\paragraph{Deflation without eigen-decomposition}
+We will show two ways to deflate \eqref{eq:simplifed_thick}, depending on whether or not we need Ritz-vectors (for ROM pole-analysis for example).  The first way is cheaper and does not compute an eigenvalue decomposition.  It only involves a Schur-decomposition $\Himp^\prime S = S U^\prime$ of the $k\times k$ south-eastern block $\Himp^\prime$, and up to $k-1$ re-orderings.     
+
+Right-multiplying \eqref{eq:simplifed_thick} with $\mat{I&0\\0&S}$ yields the Krylov-Schur decomposition  
+\begin{align}
+\H \mat{Y &V S} &=  \mat{Y & V }
+\mat{U & GS \\ 0&\Himp^\prime S} +  \mat{0  &  r_k e^T_k S}\nonumber\\
+&=\mat{Y & V } \mat{I&0\\0&S}\mat{U & GS \\ 0&U^\prime} +  \mat{0  &  r_k \c{s}}\nonumber\\
+&= \mat{Y &V S}\mat{U & GS \\ 0&U^\prime} + r_k \mat{0  &  \c{s}}
+\label{eq:schur_thick}
+\end{align}    
+that we are going to truncate, with $s=\c{S}e_k=(s_1,s_2,\ldots,s_k)$.   The structure of \eqref{eq:schur_thick} permits us to know that the Ritz-vector $z_1\in\spn \mat{Y &V s_1}$ associated with diagonal entry/Ritz-value $u^\prime_{11}$ satisfies 
+\begin{equation}
+\nrm{2}{\H z_1 - u^\prime_{11}z_1} \leq |s_1|,
+\label{eq:schur_residual} 
+\end{equation}
+but only for the first diagonal entry $u^\prime_{11}$ of $U^\prime$, so we must re-order the Schur-decomposition  $\H S = S U^\prime$  (and re-evaluate $s=\c{S}e_k$) to check residual error for different Ritz-values of  $U^\prime$.  To see this, consider the general $\ell=3$, $k=2$ case, where 
+\begin{equation}
+\mat{U & GS \\ 0&U^\prime} =
+ \mat{u_{11}&*&*&*&*\\%
+        &u_{22}&*&*&*\\
+	  &&u_{33}&*&*\\
+	 &&&u_{11}^\prime&* \\
+	 &&&&u^\prime_{22}\\
+}
+\end{equation}
+and 
+\[
+\mat{0  &  \c{s}} = \mat{0&0&0&s_1&s_2}
+\]
+and we assume $s_1,s_2\neq 0$.  Then there is an orthogonal matrix $Q$ such that 
+\begin{equation}
+\c{Q}\mat{U & GS \\ 0&U^\prime}Q =
+ \mat{u_{11}^\prime&*&*&*&*\\%
+        &u_{22}&*&*&*\\
+	  &&u_{33}&*&*\\
+	 &&&u_{11}&* \\
+	 &&&&u^\prime_{22},
+}
+\end{equation}
+and the first $4$ entries of 
+\[
+\mat{0  &  \c{s}}Q = \mat{0&0&0&s_1&s_2}Q
+\]
+\alert{get back to this}
+
+\medskip
+
+ In general, the first non-zero entry $s_j$ of 
+\[
+\mat{0  &  \c{s}} = \mat{0&\cdots&0&s_j&s_{j+1}&\cdots&s_k}
+\]
+ serves as a residual-error for its corresponding Ritz value $u^\prime_{jj}$ on the diagonal of $U^\prime$.   If we determine that $u^\prime_{jj}$ is converged because\footnote{We set $\texttt{tol}:= 10^4$ for most numerical experiments.} 
+\[
+|s_j| <\texttt{tol} \cdot |u^\prime_{jj}|
+\]
+ or we want to keep its associated Schur-vector for some other  reason, we set $s_j$ to zero, otherwise we re-order the Schur decomposition so that $u^\prime_{jj}$ is in the last position of $ U^\prime$ and reconsider \eqref{eq:schur_thick} with the new ordering.   
+
+\end{comment} 
+
+\paragraph{Deflation with eigen-decomposition}
+Recall the thick-restart Krylov decomposition 
+\begin{equation}
+\H \mat{Y &V} =  \mat{Y & V }
+\mat{U & G \\ &\Himp^\prime} +   \mat{\Yh B  &  R_k F}
+\label{eq:simplifed_thick}
+\end{equation}    
+that we want to deflate, and consider the eigen-decomposition
+\begin{equation}
+\mat{U & G \\ &\Himp^\prime}\mat{W_{11}&W_{12}\\&W_{22}} 
+=
+\mat{W_{11}&W_{12}\\&W_{22}} 
+\mat{U_{\ell\ell} &\\&\Lambda}
+\label{eq:coeff_mat_eig_decomp}
+\end{equation}
+of the $(\ell+k)\times (\ell+k)$ (perturbed) Rayleigh-quotient.
+Note that the $\ell \times \ell$ block  $W_{11}$ is upper-triangular and
+\[
+U W_{11}=W_{11} U_{\ell\ell}
+\]
+ is an eigenvalue decomposition of  $U$.  We assume that the decomposition \eqref{eq:coeff_mat_eig_decomp} leaves the diagonal entries (eigenvalues) $u_{ii}$ of $U$ in the same order\footnote{Matlab's \texttt{eig} does this.}, so that 
+\[
+\mat{U_{\ell\ell} &\\&\Lambda}
+=
+\mat{u_{11} \\%
+         &\ddots\\
+	&&u_{\ell\ell}\\
+	&&&\lambda_1\\
+&&&&\ddots\\
+&&&&&\lambda_k}.
+\]
+
+Applying the eigen-basis $W=\mat{W_{11}&W_{12}\\&W_{22}}$ to \eqref{eq:simplifed_thick} from the right yields 
+\begin{equation}
+\H \mat{Z_1 & Z_2 } = 
+\mat{Z_1 & Z_2 }\mat{U_{\ell\ell} &\\&\Lambda} 
++  \mat{\Yh B  &  R_k F}\mat{W_{11}&W_{12}\\&W_{22}}. 
+\label{eq:thick_ritz_ROM}
+\end{equation}   
+where the Ritz-vectors 
+\[
+\mat{Z_1 & Z_2 } 
+= 
+\mat{Y&V} \mat{W_{11}&W_{12}\\&W_{22}} .  
+\]
+are separated into $Z_1$, associated with the locked-subspace $\Y$, and $Z_2$, the new Ritz-vectors generated on this cycle.  We want to determine which Ritz-vectors $z_j$ are converged and append them, as a Schur-basis, to $Y$ for the next cycle.  
+
+
+
+
+For $Z_1 = Y W_{11}$, \eqref{eq:thick_ritz_ROM} gives us
+\begin{equation}
+\H Z_1 = Z_1 U_{\ell\ell} + \Yh B W_{11}
+\label{eq:thick_ritz_Y}
+\end{equation}
+which is nothing new $\|\Yh B W_{11}\|=\|\Yh B\|$, except to observe that we will need to translate \eqref{eq:thick_ritz_Y} to a relation that involves $\H_2 \neq \H$ and that justifies retaining the Schur-basis $Y$.
+
+For new Ritz-pairs $\lambda_j\in\Lambda$ and $z_j\in Z_2$, \eqref{eq:thick_ritz_ROM} implies
+\begin{equation}
+\begin{aligned}
+\H Z_2 - Z_2 \Lambda &=   \Yh B W_{12} + R_k F W_{22}\\
+&= \mat{\Yh & R_k} \mat{B W_{12} \\F W_{22}}.
+\end{aligned}
+\label{eq:thick_ritz_V}
+\end{equation}
+
+
+
+\paragraph{Returning to a Schur-decomposition}
+Suppose we are keeping $k^\prime\leq k$ Ritz-values and we  rearranged and truncated the eastern part of \eqref{thick_eig_decomp} (corresponding to $\Lambda$).  
+
+Recall that $W_{11}$ is upper-triangular, and $W_{22}$ is not triangular in general. 
+If we take the  Schur-decomposition 
+\[
+W_{22} S = S T
+\]
+where $S$ is orthonormal and $T$ is upper-triangular.  The
+larger Schur-decomposition 
+\begin{equation}
+\mat{W_{11}&W_{12}\\&W_{22}}\mat{I&\\ &S} 
+=
+\mat{I&\\ &S} \mat{W_{11} &W_{12}S\\&T}
+\label{eq:thick_schur_eigen}
+\end{equation}
+follows.  Then applying $\mat{I&\\ &S}$  to \eqref{eq:simplifed_thick} yields 
+\begin{equation}
+\H \mat{Y &V S } =  \mat{Y & V S}
+\mat{U & G S \\ &T} +  \mat{\Yh B & R_k F S}.
+\label{eq:simplifed_thick_deflated_schur}
+\end{equation}    
+
+
+
+
+\paragraph{Returning to a Schur-decomposition via QR decomposition}
+if we take the $QR$ factorization  
+\begin{equation}
+W_{22} = Q T
+\label{eq:thickQR}
+\end{equation}
+where $Q$ is orthonormal and $T$ is upper-triangular then the larger $QR$ factorization
+\[
+\mat{W_{11}&W_{12}\\&W_{22}} = \mat{I&\\&Q} \mat{W_{11} &W_{12}\\&T}.
+\]
+follows.
+
+Note that from \eqref{thick_eig_decomp} we have $\Himp^\prime W_{22} = W_{22} \Lambda$ so \eqref{eq:thickQR} implies that $Q$ is a Schur basis of $\Himp^\prime$, i.e.
+\[
+\Himp^\prime Q 
+=  Q \left(T \Lambda T^{-1}\right).
+\] 
+Then applying $\mat{I&\\&Q}$ to \eqref{eq:simplifed_thick} from the right yields the Krylov-Schur relation
+\begin{equation}
+\H \mat{Y &VQ } =  \mat{Y & V Q}
+\mat{U & G Q \\ &U^\prime} +  \mat{\Yh B & R_k F Q},
+\label{eq:simplifed_thick_deflated_qr}
+\end{equation}    
+where $U^\prime = T \Lambda T^{-1}$ is upper-triangular so now we have an updated Schur representation  
+ \begin{equation}
+\H Y_2 =  Y_2 U_2 + \Yh_2 B_2
+\end{equation}
+of the locked subspace $\Y_2=\spn Y_2$ where 
+\begin{align*}
+Y_2 =  \mat{Y &V Q}\in\C^{N\times (\ell+k^\prime)},
+&\quad  
+\Yh_2 =\mat{\Yh &R_k}\in\C^{N\times ?},\\  
+U_2 =\mat{U & G Q\\&U^\prime}\in\C^{(\ell+k^\prime)^2},
+&\quad
+B_2 =\mat{B&\\&F Q}\in\C^{(m+?)^2}.
+\end{align*}
+
+
+
+
+\begin{comment}
+
+
+\subsection{begin junk here}
+\begin{algorithm}[htb]% note this is being handled by the algorithm2e package
+\DontPrintSemicolon
+\SetKwComment{tcp}{\% }{}
+\KwIn{$\H$, $\Rr$, $Y = \mat{y_1,y_2,\ldots,y_\ell}$}
+\KwOut{orthonormal $V$, where  $\spn V = \krylov{n}{\H}{\Rr}\setminus \Y$, and $\Himp = \c{\mat{V&Y}} \H \mat{V&Y}$}
+
+Initialize $\Himp := F$, $r_0 := \Rr$ \;
+\For(\qquad\tcp*[h]{Make $r_0$ orthogonal to $\mat{y_1&y_2&\cdots&y_{\ell}}$})
+	{ $i = 1$ \KwTo $\ell$}{
+		$\rho_i := \c{y_i}r_0$  \; 
+		$r_0 := r_0 - \rho_i y_i$\; 
+	}
+$\rho_{\ell+1} := \nrm{2}{r_0}$\;
+$v_1 := r_0 / \nrm{2}{r_0}$  \qquad\tcp{this establishes $v_1 = \mat{Y & V}\rho$}
+
+\BlankLine
+\For{$k = 1$ \KwTo $n$} {
+	$r_k := \H v_{k}$\; \label{Arnoldi_mult}
+
+\For(\qquad\tcp*[h]{Make $r_k$ orthogonal to $\mat{y_1&y_2&\cdots&y_{\ell}}$})
+	{ $i = 1$ \KwTo $\ell$}{
+		$h_{ik} := \c{y_i}r_k$  \; 
+		$r_k := r_k - h_{ik} y_i$\; 
+	}
+
+
+	\For(\qquad\tcp*[h]{Make $r_k$ orthogonal to previous $\{v_1,v_2...,v_k\}$}){ $i = 1$ \KwTo $k$}{
+		$h_{\ell+i,\ell+k} := \c{v_k}r_k$  \;
+		$r_k := r_k - h_{\ell+i,\ell+k}v_j$\; 
+}
+\BlankLine
+	\If{$\nrm{2}{r_k} \neq 0$}{
+	$h_{\ell+k+1,\ell+k} := \nrm{2}{r_k}$\;
+	$v_{k+1} := r_k / \nrm{2}{r_k}$\;
+	}
+	\lElse{exit $k$-loop}
+}
+\KwRet{$V=\mat{v_1&v_2&\cdots&v_n}$, $r_n=v_{n+1}h_{n+1,n}$, $\Himp = \mat{h_{ij}}$}\;
+\caption{{\sc Thick-Start Arnoldi}}
+\label{alg:thick_start_arnoldi}
+\end{algorithm}
+
+\subsubsection{MOR method}
+Thick restart with exact deflation described in the previous section (\S\ref{sec:thick_theory}) motivates the following multi-point method (algorithm~\ref{alg:thick_arnoldi}) for model reduction.   Algorithm~\ref{alg:thick_arnoldi}  implies a projected ROM that matches at least $l_j$ moments about expansion point $\sigma_j$, for $j=1,2,...,\tau$.  
+It constructs bases $V_1,V_2,\ldots,V_\np$, and bases $Y_1,Y_2,\ldots,Y_\np$ such that 
+\[
+\spn V_j = \krylov{l_j}{\H(\sigma_j)}{\Rr(\sigma_j)} \setminus \Y_{j-1} 
+\]
+where  $\Y_j = \spn Y_j$ is the accumulated $(\A,\E)$-invariant subspace after the $j$-th cycle.  Thus $\Y_0 = \{ \}$ and $\Y_{j-1}\subseteq \Y_j$. 
+
+Also, 
+\[
+\krylov{l_j}{\H(\sigma_j)}{\Rr(\sigma_j)} \subseteq \spn \mat{V_1 & V_2 &\cdots & V_j}.
+\]
+
+
+       
+
+
+\begin{algorithm}[htb]% note this is being handled by the algorithm2e package
+\DontPrintSemicolon
+\SetKwComment{tcp}{\% }{}
+\KwIn{State space realization $(\A,\E,\Bb,\Cc)$, interpolation points $\sigma_1, \sigma_2,\ldots,\sigma_\np\in\C$, and number $l_1, l_2, \ldots,l_\np$ of moments to match at each one.}
+\KwOut{matrices $V_1,V_2,\ldots,V_\np$ where $\krylov{l_j}{\H(\sigma_j)}{\Rr(\sigma_j)} \subseteq \spn \mat{V_1 & V_2 &\ldots & V_j}$}
+
+\BlankLine
+$Y := \mat{\cdot}$\;
+\For{ j  = $1$ \KwTo $\np$} {
+$\H_j := (\A-\sigma_j \E)^{-1}\E$, \quad $\Rr_j := (\sigma_i \E - \A)^{-1}\Bb$ \;
+$\ell_j := \dim Y$\;
+\BlankLine 
+
+$r_0 := \Rr_j$ \;
+\For(\qquad\tcp*[h]{Make $r_0$ orthogonal to $\mat{y_1&y_2&\cdots&y_{\ell_j}}$})
+	{ $i = 1$ \KwTo $\ell_j$}{
+		$\rho_i := \c{y_i}r_0$  \; 
+		$r_0 := r_0 - \rho_i y_i$\; 
+	}
+$\rho_{(\ell_j +1)} := \nrm{2}{r_0}$\;
+$v_1 := r_0 / \nrm{2}{r_0}$  \qquad\tcp{this establishes $v_1 = \mat{Y  & V}\rho$}
+
+\BlankLine
+\For{$k = 1$ \KwTo $l_j$} {
+       $r_k := \H_j v_{k}$ \;
+\BlankLine
+	\For(\qquad\tcp*[h]{Make $r_k$ orthogonal to $\mat{y_1&y_2&\cdots&y_{\ell_j}}$})
+	{ $i = 1$ \KwTo $\ell_j$}{
+		$h_{i,(\ell_j + k)} := \c{y_i}r_k$  \; 
+		$r_k := r_k - h_{i, (\ell_j +k)}y_i$\; 
+	}
+	
+\BlankLine
+	\For(\qquad\tcp*[h]{Make $r_k$ orthogonal to previous $\mat{v_1&v_2&\cdots&v_k}$} of $j$-th cycle)
+		{ $i = 1$ \KwTo $k$}{	
+			$h_{(\ell_j+i), (\ell_j +k)} := \c{v_i}r_k$  \;
+			$r_k := r_k - h_{(\ell_j+i), (\ell_j +k)}v_i$\; 
+		}
+\BlankLine
+	\If{$\nrm{2}{r_k} \neq 0$}{
+	$h_{(\ell_j+k)+1,(\ell_j+k)} = \nrm{2}{r_k}$\;
+	$v_{k+1} = r_k / \nrm{2}{r_k}$\;
+	}
+	\lElse{exit $k$-loop}
+	}
+\BlankLine
+$\rrimp_j := \mat{\rho_i}$\;
+$V_j :=  \mat{v_1&v_2&\cdots&v_{l_j}}$\;
+$\Himp_j := \mat{h_{ij}}$\;
+ \tcp{Now we have $V_j\in\C^{N\times l_j}$, $\Himp_j\in\C^{(\ell_j + l_j) \times (\ell_j + l_j)}$, and $Y\in\C^{N\times \ell_j}$} 
+\tcp{ where $\H_j \mat{Y  & V_j} = \mat{Y & V_j}\Himp_j + r_{l_j} e^T_{(\ell_j + l_j)}$}
+Determine $U$, orthogonal $S$ such that $\Himp_j S \approx S  U$ \;  
+$Y : =  \mat{Y  & V_j} S$
+}
+\KwRet{$\{V_1,V_2,\ldots,V_\np\}$,\quad $Y$}\;
+\caption{{\sc Thick-restarted rational-Arnoldi for MOR}}
+\label{alg:thick_arnoldi}
+\end{algorithm}
+
+
+
+
+%\input{alg1.tex}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%5
+\subsection{Combined PCC-Krylov subspaces}
+So far we have discussed obtaining a basis for  the PCC-Krylov subspace $\krylov{n}{\H}{\RR}^*$
+induced by a matrix $\H$ and starting block $\RR$ given by \eqref{eq:singlematrixdefs}.
+Now, suppose we have several multiplier matrices
+$\H_1, \H_2,...,\H_k\in\C^{N\times N}$
+and starting-block matrices $\RR_1,\RR_2,...,\RR_k\in\C^{N\times p}$
+whose induced Krylov subspaces converge to the same space
+\[
+\krylov{\widetilde{N}}{\H_1}{\RR_1} = \krylov{\widetilde{N}}{\H_2}{\RR_2}
+= \cdots = \krylov{\widetilde{N}}{\H_k}{\RR_k}
+\quad \text{for some }\widetilde{N}\leq N
+\]
+(so that we expect significant overlap in their bases), and
+we want to compute a basis  for a space
+$\V$ with the property that
+\[
+	\bigcup_{j=1}^{k}\krylov{n_j}{\H_j}{\RR_j}^* \subset \V,
+\]
+i.e. the space $\V$ contains every PCC-Krylov subspace that would be constructed via
+$n_j$ iterations of the band-Arnoldi process on $\H_j$ and $\RR_j$, for $j=1,2,...,k$.
+A straightforward way to produce such a basis is to construct a sequence of
+spanning sets $V_j$, where
+\[
+\spn V_1 = \krylov{n_1}{\H_1}{\RR_1},
+\]
+and for $j\geq 2$
+\[
+\spn V_j = \krylov{n_j}{\H_j}{\RR_j} \setminus \spn\{V_1,V_2,...,V_j\}.
+\]
+
+Then
+\begin{equation}
+	\V = \spn\left\{V_1^*, V_2^*, \ldots, V_k^*\right\}
+	= \spn\left\{ V_1, V_2, \ldots, V_k\right\}^*
+\label{eq:basesComb}
+\end{equation}
+\begin{note}
+Replacing each $\H_j$ and $\RR_j$  with their equivalent-real
+forms $\Heq_j$, $\Req_j$ (see Sec.~\ref{sec:eqreal})
+yields the same space  \eqref{eq:basesComb}, so without loss of generality we
+use the simpler notation to represent either formulation.
+\end{note}
+
+
+\subsubsection{Via eigenvalues of Arnoldi matrix}
+For this method, we use both Arnoldi matrix $\Heq_n$ and $\Veq_n$.
+Given that $\H$ is diagonalizable as  $\H = X\Lambda X^{-1}$ (we consider its
+Jordan-normal form if not),  the equivalent-real formulation
+$\Heq$ can be factored \cite[Proposition 5.1]{AN} as
+\begin{equation}
+Y^{-1}\Heq Y = \mat{\Lambda& 0\\0&\conj{\Lambda}} \quad\text{where}\quad
+Y = \frac{1}{\sqrt{2}}\mat{X&-i\conj{X}\\-iX&\conj{X}}
+.
+\label{eq:eqrealeigstruct}
+\end{equation}
+
+This gives the following relationships between eigenvalues/vectors of $\H$
+and $\Heq$:
+\begin{itemize}
+	\item[(i)] $\sigma(\Heq) = \sigma(\H) \cup \sigma(\conj{\H})$
+	\item[(ii)] For an eigenpair $(\lambda,x)$ of $\H$, it follows that  $(\lambda,y)$ and
+		$(\conj{\lambda},\conj{y})$ are eigenpairs of $\Heq$, where $y=\mat{x \\-ix}$.
+	\item[(iii)] For an eigenpair $(\lambda,y)$ of $\Heq$, there exists a unique
+	$x\in\C^N$ such that either
+	\[  y = \mat{x\\-ix}, \quad \lambda \in\sigma(\H), \qquad\text{or}\qquad
+		y = \mat{-i\conj{x}\\ \conj{x}},\quad  \lambda \in\sigma(\conj{\H}).
+	\]
+		and incidentally $x$ is an eigenvector of $\H$.
+\end{itemize}
+For simplicity of notation we have omitted the $1/\sqrt{2}$ factor, but it is necessary
+to preserve the unit property of the eigenvectors,
+i.e. $\nrm{2}{x}=1 \Leftrightarrow \nrm{2}{y}=1$.
+
+The Arnoldi process with $\Heq$ and starting block $\Req$ provides us with
+ Arnoldi (``Hessenberg'') matrix $\Heq_n$, and Arnoldi vectors $\Veq_n$.
+Eigenvalue decomposition of $\Heq_n$ yields Ritz-values (approximate eigenvalues)
+$\reig\in\sigma(\Heq_n)$
+of $\Heq$ each of which is an approximate eigenvalue
+either of $\H$ or of $\conj{\H}$,
+and eigenspace $W$ such that $Z=\Veq_n W$ is an approximate eiegenspace of
+$\Heq$.  We want to approximate $\sigma(\H)$, but it is not
+immediately apparent if a Ritz-value $\reig$ is an approximate eigenvalue of $\H$ or of
+$\conj{\H}$. Solution of the following minimization problem allows us to distinguish the
+Ritz-values:
+In light of \eqref{eq:eqrealeigstruct} we determine the approximate
+eigenspace
+\begin{equation}
+\widetilde{X} = f(Z) := \argmin_X\left\| Z - \frac{1}{\sqrt{2}}\mat{X\\-iX} \right\|
+= \frac{1}{\sqrt{2}} \left( \tp{Z}{}+i\bt{Z}{} \right)
+\label{eq:minslvX}
+\end{equation}
+of $\H$. Next, we consider the \emph{structurally-correct} variation of $Z$,
+\begin{equation}
+ 	Z_{\text{alt}} = g(Z) := \frac{1}{\sqrt{2}}\mat{\widetilde{X}\\-i\widetilde{X}}
+ 	 = \frac{1}{\sqrt{2}}\mat{f(Z)\\-if(Z)}
+ 	= \frac{1}{2}(Z+i\mat{\bt{Z}{}\\ -\tp{Z}{}})
+ \label{eq:Zalt}
+\end{equation}
+
+\eqref{eq:minslvX} and \eqref{eq:Zalt} provide alternatives
+to relative residual as a measure of Ritz-vector convergence, as well as a simple
+way to determine whether a Ritz-value $\reig$ of $\Heq$ is associated with $\H$,
+or with $\conj{\H}$. Our numerical experiments did not show $Z_{\text{alt}}$ to be a
+better approximation than $Z$, in general.
+
+
+
+\subsubsection{Convergence criteria for Arnoldi matrix eigenvalues}
+Consider $f$, defined
+in \eqref{eq:minslvX}.  For an exact eigen-pair $(\lambda, y)$ of $\Heq$
+where $\lambda\in\sigma(\H)$, we have that
+that $y=\mat{x&-ix}^T$, where $(\lambda,x)$ is the corresponding
+exact eigen-pair of $\H$.
+Then $f(y) = x$, and $f(\conj{y})=0$, or using \eqref{eq:Zalt}, we have $y_\text{alt}=g(y)=y$
+and $g(\conj{y})=0$.
+Thus, for a Ritz-pair $(\reig,z)$ of $\Heq$, we can expect that
+\emph{form-error} $\nrm{2}{z-z_{\text{alt}}}\approx 0$
+ only if $\reig$ is sufficiently converged, \emph{and} it is
+an approximate eigenvalue of $\H$. Combining \eqref{eq:minslvX} and \eqref{eq:Zalt}
+and assuming $\nrm{2}{z}=1$,
+\begin{align*}
+4\nrm{2}{z-z_\text{alt}}^2 &= \nrm{2}{\tp{z}{}-i\bt{z}{}}^2 + \nrm{2}{\tp{z}{}-i\bt{z}{}}^2 \\
+&= (\tp{z}{}-i\bt{z}{})^H(\tp{z}{}-i\bt{z}{}) +(\tp{z}{}-i\bt{z}{})^H(\tp{z}{}-i\bt{z}{})\\
+&= 2+4\operatorname{Im}(\c{(\tp{z}{})}\bt{z}{}).
+\end{align*}
+
+ In summary, for $z_\text{alt}=g(z)$ and $\widetilde{x}=f(z)$,
+ \begin{equation}
+ 0\quad\leq\quad \nrm{2}{z-z_\text{alt}}^2 		 \quad=\quad
+ \frac{1}{2}+ \operatorname{Im}((\tp{z}{})^H\bt{z}{})  \quad=\quad
+ 1 - \nrm{2}{\widetilde{x}}^2 \quad\leq\quad 1
+ \label{eq:formerr}
+ \end{equation}
+where
+\[
+\Im((\tp{z}{})^H\bt{z}{})=
+\mat{-\Im(\tp{z}{}) \\ \Re(\tp{z}{})^T} \mat{\Re(\bt{z}{}) \\ \Im{\bt{z}{}}},
+\]
+may present an ideal measure of convergence for Ritz-values of $\Heq$, and thus for poles of
+the ROM transfer function determined via equivalent-real formulation.
+
+ For a Ritz-pair $(\reig,z)$ of realified operator $\Heq$
+($z=\Veq_n w$, where $(\reig,w)$ is an eigenpair of Arnoldi matrix $\Heq_n$),
+we specify the relative-residual error, in general, as
+\begin{equation*}
+      \mathrm{rr} = \frac{\nrm{}{\Heq z-\reig z}}{\nrm{}{\reig z}}.
+\end{equation*}
+We compute two estimates of relative residual error:
+\begin{itemize}
+\item Via the Arnoldi relation, so that
+$\Heq \Veq_n w = \reig \Veq_n w + \eta \veq_{n+1} e_n^{T} w$
+implies
+	 \begin{equation*}
+	      \mathrm{rr_{arnoldi}} =  \frac{\nrm{2}{\Heq z-\reig z}}{\nrm{2}{\reig z}}
+	      = \frac{\vert \eta(e_n^{T} w)\vert \nrm{2}{\veq_{n+1}}}{\vert \reig\vert\nrm{2}{z}}
+	      = \left\vert\frac{\eta w_{n}}{\reig}\right\vert
+      \end{equation*}
+
+\item $\mathrm{rr_{explicit}}$, by explicitly computing $\Heq z$ and $\reig z$.  (This is
+computationally impractical with typical applications, but we do it with our examples, for
+comparison purposes.)
+\end{itemize}
+	
+The infinity norm $\nrm{\infty}{z}=\max_j\|z_j \|$ can also be used and may be more efficient
+to compute, but for the sake of simplicity we do not consider it here.
+
+Different measures of convergence for the same Ritz-values are compared in
+figure~\ref{fig:rrhess308s1w50}.
+For every example that we have tried, the values indicate
+roughly the same number of converged values/pairs for a given convergence tolerance.
+The form-error for the eigenvalue represented in the $14$-th position
+of figure~\ref{fig:rrhess308s1w50} is exactly $0$ (and is thus missing from the plot),
+although relative residual errors indicate
+that the Ritz/eigenvalue is not exact.  This suggests that it is possible for a Ritz-vector
+to be of the correct form $\mat{x &-ix}^T$ given by \eqref{eq:eqrealeigstruct}, and yet
+not be an eigenvector of $\Heq$,  i.e. the converse of \cite[Proposition 5.1]{AN}
+does not hold.
+	
+\begin{figure}[htbp]
+	\centering
+	\putfig{.70}{rrhess50_308s_1.png}
+	\caption{Relative residual error (determined via Arnoldi relation and explicitly computed)
+	 and form-error squared $\nrm{2}{z-z_\textrm{alt}}^2$
+	 of eigenvalues of $\Heq$ after $50$ iterations on example data set
+	 $\mathtt{ex308s_1}$ with $\xp=10^9\pi(.5+i)$.
+	 %Also, an alternate form error \texttt{relZdiff} given by $\nrm{\infty}{z-z_\textrm{alt}} / \nrm{\infty}{z}$.
+	 Relative residual errors do not distinguish Ritz values
+	 $\lambda$ and $\conj{\lambda}$ of $\Heq$, but form error does. Using the convergence tolerance
+	 $10^{-5}$, residual error formulation determines $11$ converged eigenvalues (in conjugate pairs),
+	 so that form-error is directly comparable to relative residual.
+	 The form-error for the $14$-th position is not plotted because it
+	 was computed to be exactly $0$.
+	%The below figure is identical except that form error is not squared ($\nrm{2}{z-z_\textrm{alt}}$).
+	}
+	\label{fig:rrhess308s1w50}
+\end{figure}
+
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+  \end{comment} 

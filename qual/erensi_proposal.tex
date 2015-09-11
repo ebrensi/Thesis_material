@@ -1,0 +1,902 @@
+% Suggested LaTeX template for a UC Davis Mathematics Qualifying Exam
+% Proposal
+
+% For official requirements, you should consult directly with your
+% advisor in addition to the Brochure specific to your graduate program.
+
+\documentclass[letterpaper]{article}
+\usepackage{amsmath,amssymb,amsthm} % For AMS Beautification
+\usepackage{fullpage} % For More Realistic Page Usage
+\usepackage{bm,verbatim,subfig,graphicx,datetime} % Extra things that I like 
+\usepackage{color}
+
+% these variables set a penalty for breaking in-line a math formula 
+%  across lines.  We set it higher to prevent that, since it is annoying.
+\relpenalty=5000    % defaults to 500
+\binoppenalty=7000  % defaults to 700
+\usdate  % format for \today
+\settimeformat{ampmtime}
+
+\newcommand{\putfig}[3][{560 420}]{\includegraphics[bb=0 0 #1, width=#2\textwidth]{figs/#3}} % for non-pdf
+%\newcommand{\putfig}[3][{}]{\includegraphics[width=#2\textwidth]{figs/#3}} % for pdf
+
+
+\input qual_macros
+
+\theoremstyle{remark}
+\newtheorem*{note}{Note}
+
+\begin{document}
+
+%\begin{comment}
+\title{\bf Proposal for Qualifying Exam}
+
+% Insert your name below
+\author{Efrem Rensi, GGAM}
+
+% Insert a specific date below if appropriate
+%\date{Draft Date: \currenttime,\ \today}
+
+\maketitle
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                       %
+%       Exam Meta Information Section   %
+%                                       %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{tabular}{c @{ }c}
+	%
+	% Exam Committee Subsection
+	%
+	\begin{minipage}[t]{0.5\linewidth}
+		\section*{Exam Committee}
+		\begin{description}
+
+			\item[Committee Chairperson:] \begin{tabular}{c} \\ \end{tabular}
+
+				Prof. Monica Vazirani
+
+			\item[Committee Members:] \begin{tabular}{c} \\ \end{tabular}
+
+				Prof. Zhaojun Bai
+
+				Prof. Robert Guy
+
+				Prof. Angela Cheer
+
+				Prof. Roland Freund
+
+		\end{description}
+	\end{minipage}  
+	&
+	%
+	% Exam Logistics Subsection
+	% 
+	\begin{minipage}[t]{0.5\linewidth}
+		\textbf{\Large Exam Logistics}
+		\begin{description}
+
+			\item[Date:] \begin{tabular}{c} \\ \end{tabular}
+
+				\newdate{qual_date}{3}{6}{2009} % date of qualifying exam
+				\dayofweekname{3}{6}{2009},\ \formatdate{3}{6}{2009} 
+
+			\item[Time:] \begin{tabular}{c} \\ \end{tabular}
+
+				1:10 PM
+
+			\item[Location:] \begin{tabular}{c} \\ \end{tabular}
+
+				MSB 2240 
+
+		\end{description}
+	\end{minipage}
+\end{tabular}
+\smallskip
+
+%\end{comment}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                               %
+%       Research Talk Section   %
+%                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Proposed Research Talk}
+	\begin{description}
+		\item[Restarted Krylov subspace model-reduction methods for 
+		RCL circuit simulation]
+
+		\item[Summary:] A general RCL circuit can be described by a time-invariant 
+		linear dynamical system, whose state-space dimension $N$ corresponds to the
+		number of circuit components (Resistors, Capacitors, and Inductors),
+		which is often prohibitively large for efficient numerical computation. The goal
+		of model reduction is to find a system of equations of order $n\ll N$, whose solution
+		approximates that of the original system.  In addition, the reduced order system 
+		should retain the important properties of \emph{stability} and \emph{passivity}.  
+		A number of model reduction schemes have been developed in the last 20 years
+		and are used in the electronics industry; however problems with the existing methods
+		keep this a very open and active area of research.  I will outline one particular 
+		model reduction technique, as well as modifications that I intend to develop and 
+		evaluate.
+   
+	 \section{Formulation (Generalized State-Space Realization)}
+	 For this research we are concerned with the RCL circuit model described by the 
+	 linear time invariant (LTI) first-order dynamical system of the form 
+	 \begin{equation}
+	 \begin{aligned}
+		Ex' &=  Ax + Bu\\
+		y &= B^Tx,
+	\end{aligned}
+	\label{eq:ds1}
+	\end{equation}
+
+	 where $A,E\in\R^{N\times N}$, $E$ is singular (in general) and 
+	 $B\in\R^{N\times \nin}$. This is an 
+	 \emph{input-output} system with $\nin$ inputs and $\nin$ outputs:  $u(t)\in\R^\nin$ 
+	 represents inputs to the circuit we wish to model, and $y(t)\in\R^\nin$ is the output
+	 vector.  The \emph{state-space}
+	 vector $x(t)\in\R^N$ represents the internal state of the model at time $t$.  For
+	 modeling a VLSI (Very Large Scale Integrated) circuit, the state space dimension $N$ 
+	 roughly corresponds to the number
+	 of circuit components, which is often large enough to prohibit efficient simulation.  
+	 For the purposes of simulation we are only concerned with the output of the model in 
+	 relation to a given input, so as long as the model behaves the way it was designed, 
+	 its internal state is not important. Viewed this way, the input-output system 
+	 \eqref{eq:ds1} is a function $y = F(u)$.
+	 Ideally we want a model that behaves like that described 
+	 by \eqref{eq:ds1}, but with as small a state-space dimension as possible:  
+	 For some $n\ll N$ we want matrices $E_n, A_n, B_n$ so that 
+	 \begin{equation}
+	 \begin{aligned}
+		E_nz' &= A_nz + B_nu\\
+		\hat{y} &= B_n^Tz,
+	\end{aligned}
+	\label{eq:ds2}
+	\end{equation}
+
+	 and the output $\hat{y}\in\R^\nin$ approximates $y\in\R^\nin$ from \eqref{eq:ds1}, 
+	 given the same input $u\in\R^\nin$.  It may be possible to create a reduced model that
+	 avoids
+	 internal states altogether; however, the advantage to having a model of the form 
+	 \eqref{eq:ds2} is that, as long as $E_n, A_n, B_n$ preserve a certain structure, 
+	 the reduced model is also physically realizable.  In the case of circuits this means 
+	 we effectively reduce the number of necessary components, yielding a smaller and more
+	 efficient circuit.
+
+	\subsection{Transfer Function}
+	
+	To compare the original and reduced order model, we need a notion of a direct 
+	relationship between input and output.  This is accomplished in the frequency
+	domain 
+	by means of a \emph{transfer function}.  Applying the Laplace transform to  
+	\eqref{eq:ds1}
+	yields the algebraic equations 
+	 \begin{equation*}
+			 \begin{aligned}
+				sEX &=  AX(s) + BU(s),\\
+				Y(s) &= B^TX(s).
+			\end{aligned}
+	\end{equation*}
+
+	Then $Y(s)=H(s)U(s)$, where 
+	\begin{equation}
+		H(s) = B^T\left(sE-A\right)^{-1}B \quad \in \quad(\C\cup\infty)^{\nin\times \nin}
+		\label{eq:tfunc}
+	\end{equation}
+	is the transfer function over a set $S\subset\C$ with which we are concerned.
+    The transfer function is actually defined on a frequency interval:
+    \begin{equation}
+    s = 2\pi i f,\qquad f\in\left[f_\mathrm{min},f_\mathrm{max}\right], 
+    \label{eq:tfunc_domain}
+    \end{equation}
+    so $S$ is an interval on the $i$-axis of the complex plane.  
+    
+    \begin{figure}[htbp]
+		\centering
+		\putfig{.48}{ex1b_tfunc.png} 			
+		\caption{Magnitude $\vert H(s) \vert$ of the transfer function for a 
+		single-input, single-output (SISO) model.  $s=2\pi i f$ for frequency range
+		$f\in \left[10^8,10^{10}\right]$.}
+		\label{fig:ex1b_tfunc}
+	\end{figure}
+	\medskip
+	
+	For SISO models, we typically visualize the transfer function by plotting 
+	its magnitude over the frequency range of interest, such as in 
+	figure~\ref{fig:ex1b_tfunc}.  Peaks and valleys in the plot are referred to 
+	as its \emph{features} and the order of magnitude of the function in the
+	absence of features is called its \emph{baseline}.  A multi-input, 
+	multi-output (MIMO) model with $\nin$ inputs and $\nin$ outputs can be regarded
+	as $\nin^2$ SISO models, with that many scalar-valued transfer functions.
+	
+	Note that $H(s)$
+	is defined only if the \emph{matrix pencil} $(sE-A)$ is \emph{regular}, meaning 
+	$(\mu E-A)$ is singular for only a finite number of values $\mu\in\C\cup \infty$. 
+	
+	
+	It is not a great loss of generality to assume that the pencil $sE-A$ has an eigenvalue 
+	decomposition, which is expressed as
+	\begin{equation}
+		AZ = EZ\M,
+	\label{eq:genEigDecomp}
+	\end{equation}
+	where $\M\in\C^{N\times N}$ is the diagonal 
+	matrix consisting of eigenvalues $\mu_j$ and $Z\in\C^{N\times N}$ is the
+	invertible matrix whose columns are the eigenvectors $z_j$.
+
+	We introduce other formulations of $H(s)$ that will be useful: 
+	\subsubsection{Single matrix formulation}
+	\label{sec:singlematrix}
+	Let $s_0\in\C$ be a point for which $s_0E-A$ is invertible.
+	Then 
+	\begin{align}
+			H(s)&= -B^T\left(A-s_0E-(s-s_0)E\right)^{-1}B\nonumber\\
+				&= B^T\left(I-(s-s_0)\A\right)^{-1}R 
+	\label{eq:tfunc_single_matrix}
+	\end{align}
+	where
+	\begin{equation}
+			\A := -(s_0E-A)^{-1}E\quad\textrm{and}\quad R := (s_0E-A)^{-1}B.	
+	\label{eq:singlematrixdefs}
+	\end{equation}
+	This is known as the \emph{single matrix formulation} of the transfer function, 
+	named for the generally non-sparse matrix $\A=\A(s_0)\in\C^{N\times N}$.
+
+
+\begin{comment} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+	\subsubsection{Eigenvalue expansion formulation}
+	We will assume $\A$ is diagonalizable and thus has the eigenvalue decomposition
+	\begin{equation}
+		 \A = Z\Lambda Z^{-1},
+	\label{eq:eigDecomp}
+	\end{equation}
+	which substituted into \eqref{eq:tfunc_single_matrix} yields the
+	\emph{eigenvalue expansion formulation} 
+	\begin{align}
+			H(s) &= B^TZ\left(I-(s-s_0)\Lambda\right)^{-1}Z^{-1}R\nonumber\\
+			&= \sum_{j=1}^N \frac{X_j}{1-(s-s_0)\lambda_j},
+			\label{eq:eig_sum}
+   \end{align}
+   where $\mathrm{diag}\{\lambda_1, \lambda_2,\ldots,\lambda_N\} = \Lambda$, and
+	$X_j\in\C^{\nin\times \nin}$.
+
+	Note that $\A=\A(s_0)$, and thus its eigenvalues $\lambda=\lambda(s_0)$,
+	depend on $s_0$.
+	
+\end{comment} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+   
+   
+   
+	\subsubsection{Pole-residue formulation}
+	The generalized eigenvalue decomposition \eqref{eq:genEigDecomp} of $(sE-A)$ 
+	implies that
+	\[
+		s_0EZ-AZ = s_0EZ-EZ\M,
+	\]
+	so 
+	\[
+		 -\A = (s_0E-A)^{-1}E = Z(s_0I-\M)^{-1}Z^{-1}.
+	\]
+  Substituting this into \eqref{eq:tfunc_single_matrix} yields the 
+  \emph{pole-residue formulation}
+  \begin{align}
+	  H(s) &= B^TZ\left(I+(s-s_0)(s_0I-\M)^{-1}\right)^{-1}Z^{-1}R\nonumber\\
+	  &= X_\infty +
+	  \sum_{j=1\atop{\mu_j\neq\infty}}^N \frac{\left(s_0-\mu_j\right)X_j}{s-\mu_j},
+  \label{eq:pole_sum}
+  \end{align}
+  where scalars $\mu_j\in\C\cup \infty$ are the \emph{poles} of the transfer 
+  function and 
+  $(s_0-\mu_j)X_j(s_0)$ are called \emph{residues}. The leading term
+  $k_\infty=k_\infty(s)$ is a polynomial in $s$ encompassing terms 
+  involving infinite poles.  
+  
+  Eigenvalues $\lambda=\lambda(s_0)$ of $\A$ and poles $\mu$ 
+  (eigenvalues of $sE-A$) are related by 
+  \begin{equation}
+  	  \lambda_j = \frac{1}{\mu_j-s_0}, \quad j=1,2,...,N,
+    \label{eq:pole_eig}
+  \end{equation}
+   and they share the same eigenvectors $z_j$. 
+   
+    From \eqref{eq:pole_sum} it is apparent that the features of $H(s)$ are 
+     determined by the poles (and zeros) near the region $S$ 
+     with which we are concerned.  Dominant poles located `far' 
+     (orders of magnitude) from $S$, as well as true infinite poles, determine
+  the baseline of $H(s)$ (for $s\approx\infty$).  Non dominant poles located
+  far from $S$ are insignificant.  
+  
+  \medskip
+  
+  
+  \begin{note}
+  %%%
+  \begin{comment}
+   The presence of $s_0$ in 
+  \eqref{eq:eig_sum} and \eqref{eq:pole_sum} may be misleading; the transfer 
+  function $H(s)$ of the unreduced model does not depend on $s_0$, but 
+  $X=X(s_0)$ does.  
+  The matrix $Z$ from \eqref{eq:genEigDecomp} is equivalent to that from 
+  \eqref{eq:eigDecomp} (up to a possible re-ordering of columns),
+  so the matrices $X_j$ are the same as well.
+  In fact, each eigenvalue $\lambda$ of the matrix $\A$ is uniquely associated
+  with
+  a pole $\mu$ of the transfer function via the relation
+  \begin{equation}
+	  \mu = s_0 + \frac{1}{\lambda},
+  \label{eq:pole_eig}
+  \end{equation}
+ An important distinction to be made is that the set of poles $\mu_j$ 
+ of the transfer function
+ (eigenvalues of the matrix pencil $sE-A$) is a defining
+ characteristic of the model, while
+ eigenvalues $\lambda = \lambda(s_0)$ of $\A$ depend on the choice of $s_0$.
+\end{comment}
+%%%
+
+ In some cases the transfer function $H(s)$ cannot
+ be expressed in the form \eqref{eq:eig_sum},
+ \eqref{eq:pole_sum}. (Take for
+ example $H(s)=1/s^2$.)  The formulation \eqref{eq:tfunc}, however, is always 
+ valid and its poles are defined as values $\mu_j$ such that $H(\mu_j)=\infty$. 
+ \end{note}
+
+
+\begin{figure}[htbp]
+\centering
+\subfloat[\label{tfunc_1bpoles}]{\putfig{0.48}{ex1b_tfunc_14poles.png}} \hfill
+\subfloat[\label{1b_poles}]{\putfig{0.48}{ex1b_14poles.png}} 			
+\caption{\subref{tfunc_1bpoles} The pole expansion \eqref{eq:pole_sum} of the 
+transfer
+function from figure~\ref{fig:ex1b_tfunc}, truncated at $14$ most relevant terms 
+out of $N=1841$.
+\subref{1b_poles} is the (finte) poles themselves plotted in the 
+complex plane,  with 
+each pole's size indicating its term's \emph{weight} in \eqref{eq:pole_sum}.
+The vertical segment 
+$S= 2\pi*[10^8, 10^{10}]$ on the $i$-axis is the region associated with the 
+frequency
+range over which we consider $H(s)$. The dominant poles correspond to peaks in 
+the magnitude of the transfer function.}
+ \end{figure}
+
+\subsubsection{Stability and Passivity}
+In order for the circuit model to be realistic, the dynamical system \eqref{eq:ds1}
+describing it must be \emph{stable}, meaning that the state-space variable remains
+bounded as $t\rightarrow \infty$.  The model possesses this property only if 
+$\mathrm{Re}\, \mu_j \leq 0$ for every finite pole $\mu_j$ of the transfer function 
+$H(s)$, and poles on the $i$-axis are simple.
+
+A \emph{passive} circuit is one that does not generate energy.  The RCL circuits we
+model do not contain voltage sources; in fact they only consume energy. 
+They are strictly passive, and any valid model of an RCL circuit must retain this
+property, which in our formulation is equivalent to \emph{positive realness} of the
+transfer function \eqref{eq:tfunc}. Our formulation \eqref{eq:ds1} of the model  is
+such that $H(s)$ is positive real only if 
+\begin{equation}
+	-(A+A^T)\succeq 0 \quad\textrm{and}\quad E\succeq 0
+\label{eq:posreal_urm}
+\end{equation}
+(are positive semi-definite) \cite[Theorem 4.5]{AN}.  We assume that in the
+unreduced 
+model \eqref{eq:ds1},
+$A,E$ are formulated correctly
+and satisfy \eqref{eq:posreal_urm}. It is important that the transfer function 
+of any reduced model is positive real, if we are to believe that it represents 
+a physically possible RLC circuit. For a more detailed discussion of stability and 
+passivity of 
+the models, see \cite[Sec. 4]{AN}. 
+
+
+
+\subsection{Pad\'{e} and Pad\'{e}-type approximations}
+	Another way to express the transfer function $H(s)$ is as a Taylor series
+	expansion about the point $s_0$ (introduced in section~\ref{sec:singlematrix}),
+	which we hereby refer to as the \emph{expansion point}.
+	\begin{equation}
+		H(s) = \sum_{j=0}^\infty (s-s_0)^jM_j,
+		\label{eq:sum_moments}
+	\end{equation}
+	where $M_j\in \C^{\nin\times \nin}$ are the \emph{moments} of $H$ about $s_0$.  
+	The approximation $H_n(s)$ that satisfies
+	\begin{equation}
+		H(s) = H_n(s) + \bigO{(s-s_0)^{q(n)}}
+		\label{eq:pade}
+	\end{equation}
+	is called a Pad\'{e} approximation if $q(n)$ is as large as possible, i.e. the 
+	Taylor
+	expansions of $H$ and $H_n$ agree at as many terms as possible; otherwise we 
+	call it a Pad\'{e}-type approximation.  An upper bound for $q(n)$ has been
+	established  (see \cite{AN}). 
+	Although it is possible to produce a Pad\'{e}
+	approximation of the transfer function, it is well known  
+	that such a model in general cannot preserve stability or passivity.  
+	
+	Equation \eqref{eq:pade} implies  
+	that the approximation is only guaranteed in a small neighborhood around $s_0$, 
+	but in practice the reduced model tends to converge in a much larger region. 
+
+	The Krylov subspace projection method we will describe produces Pad\'{e}-type models
+	based on the following fact: Via Neumann series expansion we can 
+	express \eqref{eq:tfunc_single_matrix} as
+	\begin{equation}
+		H(s) = B^T\left(\sum_{j=0}^\infty (s-s_0)^j\A^j\right)R.
+		\label{eq:neumann}
+	\end{equation}
+   The moments $M_j$ from \eqref{eq:sum_moments} are specified exactly: $M_j = B^T\A^jR$.
+
+   \subsection{Krylov subspaces}
+   The \emph{$n$-th Krylov subspace} induced by $\A\in\C^{N\times N}$ and 
+      starting vector $r\in\C^N$ is
+      defined as  
+      \begin{equation}
+   	  \krylov{n}{\A}{r}= \mathrm{span} \left\{r, \A r, \A^2r,\ldots, \A^{n-1}r\right\}.
+   	  \label{eq:krylov_def}
+      \end{equation}
+      
+      
+      The $n$-th \emph{block} Krylov subspace is the generalization of 
+      \eqref{eq:krylov_def}
+      to multiple starting vectors represented as columns of the matrix 
+   $R = \mat{r_1&r_2&...&r_\nin}$, resulting in the space $\krylov{n}{\A}{R}$.
+   
+   The matrix $\A$ is very large and sparse in general and it is not feasible to
+   explicitly construct it, but we assume we have some relatively efficient way
+   to compute
+   the matrix-vector product $\A v$ for a 
+   vector 
+   $v\in\R^N$. Given \eqref{eq:neumann}, one naive approach 
+   (\emph{explicit moment matching})
+   to computing the transfer function $H(s)$ involves generating the 
+   block Krylov-sequence
+   \begin{equation}
+		R, \A R,\A^2R,\ldots
+	\label{eq:krylov_seq}
+   \end{equation}
+   to as many terms as we wish via successively left multiplying the previous term by
+   $\A$. 
+   Unfortunately, in finite-precision arithmetic the sequence 
+   \eqref{eq:krylov_seq} converges to the eigenspace associated with the dominant 
+   eigenvector(s)
+   of $\A$, (which are also eigenvectors of the pencil $sE-A$). 
+  % To see why this is undesirable, recall the eigenvalue formulation
+  % \eqref{eq:eig_sum} of the transfer function.  The sequence
+  % \eqref{eq:krylov_seq} is not guaranteed to converge to the eigenspace associated 
+  % with the eigenvalues whose terms dominate \eqref{eq:eig_sum}.  
+   In general we will not get a good approximation using explicit moment matching,
+   but 
+   this property of selective convergence to dominant eigenvalues can be used  
+   to our advantage (see section \ref{sec:s0_selection}). Rather than explicit 
+   moment
+   matching, we reduce the order of the model \eqref{eq:ds1} using a projection 
+   on to the vector space implied by \eqref{eq:krylov_seq}.
+
+   
+
+   \subsection{The Arnoldi process}
+   \label{sec:arnoldi}
+   The Arnoldi process (Arnoldi 1951) generates a basis for the Krylov 
+   subspace $\krylov{n}{\A}{r}$. Given a start 
+   vector $r$ and a method to compute the matrix-vector product $\A v$ for
+   $v\in\R^N$, the Arnoldi process produces an orthonormal basis 
+   $\{v_1,v_2,\ldots,v_n\}$ for $\krylov{n}{\A}{r}$ via the following 
+   recursion: 
+   \begin{enumerate}
+   \item $v_1 := r/\|r\|$
+   \item For $n\geq 2$, compute $q=\A v_{n-1}$, and 
+   orthogonalize $q$ against $\{v_1,\ldots ,v_{n-1}\}$ using the Grahm-Schmidt 
+   process. 
+   \item set $v_n:=q/\|q\|$
+   \end{enumerate}
+\begin{comment}
+   More specifically, $n$ steps of the Arnoldi process produce the Arnoldi 
+   decomposition of $\A$,
+	\begin{equation}
+	   \A V_n = V_n\A_n + \eta v_{n+1} e_n^{T},
+	   \label{eq:arnoldi_decomp}
+   \end{equation}
+   where $V_n\in\C^{N\times n}$ is an orthogonal basis matrix for 
+   $\krylov{n}{\A}{r}$, $\eta\in\C$, and the upper Hessenberg matrix 
+   $\A_n\in\C^{n\times n}$ 
+   is the projection of $\A$ on to that space, and can be considered a reduced-
+   order approximation to $\A$.
+   \end{comment}
+   
+   The \emph{Band-Arnoldi} algorithm \cite{AN} is a generalization of the Arnoldi 
+   process to generate a basis for a block-Krylov subspace,
+   for which the possibility of linear dependence between and within the blocks 
+   $\A^jR$ must be dealt with.  
+   %The matrix $\A_n$ produced by band-Arnoldi is not upper Hessenberg in general.
+   %For simplicity we use single input single output (SISO) models in our
+   %demonstrations, but the circuits we wish to model are typically multi-input 
+   %multi-output (MIMO) and require the band and block processes.
+
+   \begin{comment}
+   \medskip
+   \subsubsection{Reduced model via ``Hessenberg'' matrix $\bm{\A}$}
+   \label{sec:hess}
+   It follows from \eqref{eq:arnoldi_decomp} that $\A_n = V_n^*\A V$, so 
+   motivated by \eqref{eq:tfunc_single_matrix} we define a formulation for the 
+   reduced model transfer function
+   \begin{equation}
+   \tilde{H}_n(s) = \tilde{B}_n^*\left(I-(s-s_0)\A_n\right)^{-1}\tilde{R}_n,
+   \label{eq:rm_hess}
+   \end{equation}
+   where
+   \[
+	\tilde{B}_n := V^*_nB \quad\textrm{and}\quad \tilde{R}_n := V^*_nR.
+   \]
+
+   This is known as the \emph{Hessenberg formulation} of the reduced model,
+   although $\A_n$ is actually only of Hessenberg form in the SISO ($\nin=1$) case. 
+   It satisfies the Pad\'{e}-type property \eqref{eq:pade} with $q(n)=n$.
+   Eigenvalues $\reig$ of $\A_n$ are called \emph{Ritz values}, 
+   and they approximate eigenvalues $\lambda$
+   of $\A$, which, via \eqref{eq:pole_eig} are related to the poles of the model.
+   Given $w\in\C^n$ ($with \|w\|=1$) and $\reig\in\C$ that satisfy $H_nw=\reig w$,
+   it follows from \eqref{eq:arnoldi_decomp} that 
+   \[
+   \A V_nw = \reig V_nw + \eta v_{n+1} e_n^{T} w,
+   \]
+
+   which provides us with a simple means to determine 
+   how accurately $\reig$ approximates an eigenvalue of $\A$.  Denoting 
+   $y := V_nw$ as the Ritz-vector of $\A$ associated with $\reig$, the
+   \emph{residual} of $\reig$ is  
+   \begin{align*}
+   \nrm{}{\A y-\reig y} &= \nrm{}{\eta(e_n^{T} w)v_{n+1}}\nonumber\\
+   &= \vert\eta w_{n}\vert,
+	\end{align*}
+   where $w_{n}$ denotes the last ($n$-th) entry of $w$.  Orthogonality of $V_n$ 
+   implies
+   that $\nrm{}{\lambda y}=\vert\reig\vert$, and thus we may use the 
+   \emph{relative residual}
+   \begin{equation*}
+   \frac{\nrm{}{\A y-\reig y}}{\nrm{}{\reig y}} 
+   = \left\vert\frac{\eta w_{n}}{\reig}\right\vert
+   %\label{eq:rel_residual}
+   \end{equation*}
+   as a convergence criterion for the ritz value $\reig$.  
+   Since $\reig\rightarrow\lambda$ for 
+   some eigenvalue $\lambda$ of $\A$, by \eqref{eq:pole_eig}, 
+   \[
+   s_0 + \frac{1}{\reig} \rightarrow \mu
+   \]
+   for some pole $\mu$ of the unreduced model, ideally a dominant one. 
+
+  \smallskip 
+   The problem with formulation \eqref{eq:rm_hess} is that the eigenvalues $\reig$
+   of $\A_n$ do 
+	not necessarily satisfy $\mathrm{Re}\,\reig\leq 0$. The transfer function 
+	\eqref{eq:rm_hess} is not positive real and thus the reduced model it 
+	represents 
+	 does not preserve stability nor passivity of the original model.
+\end{comment}
+
+  \subsubsection{Reduced order models via explicit projection}
+ The \emph{$n$-th block Krylov subspace} induced by $\A$ and $R$
+ is defined as  
+ \[
+  \krylov{n}{\A}{R}:= \mathrm{span}\left\{R,\A R,\A^2R,\ldots,\A^{n-1}R\right\}.
+ \]
+ Given a matrix 
+ $V_n\in\R^{N\times n}$ with full column rank and 
+ \begin{equation}
+ \krylov{n}{\A}{R} \subseteq \colspan V_n,
+ \label{eq:looser}
+ \end{equation}
+ set
+ \begin{equation}
+ A_n := V_n^TAV_n, \quad E_n := V_n^TEV_n, \quad B_n := V_n^TB.
+ \label{eq:projections}
+ \end{equation}
+
+ $H_n(s)$ is not guaranteed to be positive real unless $V_n$ is real. 
+ We can ensure realness by using 
+ \[
+ \tilde{V}_n=\mathrm{colspan}\left[\mathrm{Re}\,V_n~\mathrm{Im}\,V_n\right]
+ \]
+ in place of $V_n$, if necessary.
+ 
+ \smallskip
+ The reduced order model \eqref{eq:ds2} with transfer function 
+\begin{equation}
+		H_n(s) = B_n^T\left(sE_n-A_n\right)^{-1}B_n
+\label{eq:rm_proj}
+\end{equation}
+ obtained this way is of Pad\'{e}-type (for proof, see \cite[Theorem 2]{Jherm}), 
+ and preserves 
+ stability and passivity of the unreduced model, since \eqref{eq:posreal_urm}
+ and \eqref{eq:projections} imply that
+ \begin{equation*}
+ -(A_n+A_n^T)\succeq 0 \quad\textrm{and}\quad E_n\succeq 0
+\end{equation*} 
+
+
+   The matrix $V_n$ computed by the Arnoldi process satisfies strict equality in 
+   \eqref{eq:looser}. The PRIMA algorithm \cite{PRIMA} generates a reduced 
+   model \eqref{eq:rm_proj} this way.  A more recent variation, SPRIM \cite{SPM}  
+   takes advantage of the more relaxed containment \eqref{eq:looser} 
+   requirement and produces
+   reduced-order projected
+   matrices $A_n$,$E_n$ and $B_n$ that retain the block structure from the
+   unreduced formulation, resulting in a model that is physically realizable as a circuit.
+   For a more thorough discussion of structure preservation, see \cite{SPM}.
+%   The price of the projected models is that they are more computationally expensive
+%   than those described in \ref{sec:hess}.   
+%   The projected model given by \eqref{eq:projections} and \eqref{eq:rm_proj} 
+%   Hessenberg formulation $\tilde{H}_n$ \eqref{eq:rm_hess} of the reduced model
+%   are not equivalent, although they do both converge to the same unreduced model in 
+%   at most $N$ iterations of the Arnoldi process.
+
+   Let $(\rpol,w)$ be an eigen-pair of the matrix pencil $sE_n-A_n$.  Then
+    $\rpol$ is a pole of \eqref{eq:rm_proj} and we will call it a \emph{Ritz-pole}.
+   Via \eqref{eq:projections},
+   \begin{equation}
+   \nrm{}{V_n^T(\rpol E - A)y} = 0
+   \label{eq:approx_pole}
+   \end{equation}
+   for the Ritz-vector $y:=V_n w$, which is a candidate for an eigenvector 
+   of $sE-A$. We explicitly compute the relative residual 
+   \begin{equation}
+	   r_{\rpol} = \frac{\nrm{}{\rpol Ey - Ay}}{\nrm{}{Ay}}
+	   \label{eq:rr}
+   \end{equation}
+   to determine whether 
+    $\rpol$ is a good approximation to a pole of the
+   unreduced model.
+   Ideally want Ritz-poles to converge to dominant poles of \eqref{eq:tfunc},
+   \eqref{eq:pole_sum}, as quickly as possible.		
+  
+  \begin{figure}[htbp]
+		\centering
+		\putfig[{646 510}]{.65}{ex1841s_3_proj_2D.png}
+		\caption{number of iterations to converge (or $200$) to approximation with $0.01$ 
+		relative $\infty$-norm error Vs. location of $s_0$ for the model 
+		of size $N=1841$ from
+		figure~\ref{fig:ex1841s3rm}. 
+		Units $x,y$ on the axes indicate  $s_0=2\pi\cdot 10^{10}\cdot(x+iy)$.
+		According to this plot the optimal location is 
+		$s_0=i \pi \cdot 10^{10}$}
+		\label{fig:ex1841s32Dcvg}
+   \end{figure}
+   
+    \begin{figure}[htbp]
+		\centering
+		\subfloat[\label{ppa}]{\putfig{.48}{ex1841k15.png}}\hfill
+		\subfloat[\label{ppb}]{\putfig{.48}{ex1841k15pol.png}}
+		\caption{Reduced order transfer function \subref{ppa} and poles
+		\subref{ppb} for a projected model
+		of $k=15$ iterations. `\textcolor{red}{$+$}'  in \subref{ppb}
+		indicates location of the optimal expansion point
+		$s_0=i\pi\cdot 10^{10}$ used
+		to compute this model. Size of pole indicates its dominance in 
+		\eqref{eq:pole_sum}, color of the pole indicates its relative residual 
+		(degree of convergence).  Note that $s_0$ is located near a cluster of 
+		dominant poles, hence the fast convergence of the model there. 
+		Also note that the complex conjugate poles converge
+		at the same rate.}
+		\label{fig:ex1841s3rm}
+   \end{figure}
+   
+   \subsection{Selection of expansion point $\bm{s_0}$}
+   \label{sec:s0_selection}
+  
+   In \eqref{eq:tfunc_single_matrix}, the point $s_0\in\C$ was used as a shift  to 
+   facilitate the single matrix form of the transfer function.  It was also 
+   used in \eqref{eq:sum_moments} in the definition of the Pad\'e property of the
+   model. The two uses of $s_0$ are somewhat related, and it is from 
+   \eqref{eq:sum_moments}
+   that we get the name \emph{expansion point} for $s_0$.  The expansion point
+   always must be chosen so that $s_0E-A$ is invertible.  Typically the circuit 
+   model is very large and we do not know where its poles are, but since any RCL
+   circuit model
+   is stable, its transfer function $H(s)$ cannot have any poles $\mu_j\in\C^+$
+   (with positive real part).  Then it is always safe to choose $s_0\in\C^+$.   
+    
+   \subsubsection{Expansion point $\bm{s_0}$ and local/global convergence}
+   The expansion point influences convergence of the Arnoldi process 
+   roughly as follows: Given a vector $v\in\C^N$ expressed in terms 
+   of the eigenvalue decomposition of $\A$,
+   \begin{equation}
+   \A v = \sum_{j=1}^N \alpha_j \A z_j = \sum_{j=1}^N \alpha_j \lambda_j z_j
+    = \sum_{j=1}^N \frac{\alpha_j z_j}{\mu_j - s_0}.
+   \label{eq:Hv}
+   \end{equation}
+   Ignoring for now the \emph{strength} $|\alpha_j|$ of $v$ in the $j$-th 
+   eigen-direction, \eqref{eq:Hv} is dominated by terms involving 
+   $\mu_j$ close to $s_0$.  In finite arithmetic, these terms can render the 
+   lesser ones insignificant, essentially confining $\A v$ to 
+   an $\A$-invariant subspace.  Thus, the vectors produced by the Arnoldi 
+   process converge first to 
+   the eigenspace 
+   associated with those poles near $s_0$, then 
+   slowly (or never) spread out to more of Krylov subspace as the 
+   iterations
+   continue.  We speak of the Arnoldi process `searching' or `discovering'
+   the Krylov subspace in this way.
+   The process is highly nonlinear and there are few proven
+   statements
+   about the nature of this convergence.  Instead, a general 
+   heuristic for fast convergence to an accurate reduced model 
+   suggests to place $s_0$ near where we suspect dominant poles to be.
+   Of course the strength $\alpha$ of $v$ in a particular eigen-direction
+   plays an important role.  For example, if $v=z_k$ is an eigenvector of $\A$,
+   then $\alpha_j=0$ for $j\neq k$, and $\A v$
+   will never escape that eigenspace.
+   
+   For a more extensive discussion of the topic of interpolation (expansion)
+    point we refer the reader to \cite[chapter 6]{grimme97}. 
+   
+   
+   \subsubsection{Complex vs strictly real $\bm{s_0}$}
+   One reason to use a strictly real expansion point is that it 
+   possibly reduces the number of necessary computations.  For $s_0\in\R$,
+   the matrices $\A$ and $R$ are also real.  Matrix multiplications 
+   $\A\A^jR$ for $j\geq0$ are four times cheaper than for general 
+   complex matrices.  For complex $\A$, the basis vectors $v_j$ produced 
+   by the Arnoldi process are also complex, meaning we must store twice
+   as much data (essentially twice as many vectors).  The orthogonalization
+   step in the Arnoldi algorithm thus also potentially involves twice as many inner
+   products per iteration.  The projections \eqref{eq:projections} also require 
+   up to 4 times as many matrix-vector products.  
+   
+   It appears that using $s_0\in\R$ so that all data remains real makes for a 
+   much more 
+   efficient algorithm.  However, it is possible that the faster convergence gained
+   by more aggressive placement of $s_0\in\C^+$  may make up for the 
+   additional computational cost of complex arithmetic.  This is an open area 
+   of research that we would like to pursue. 
+
+   \subsection{Thick-Restarted Arnoldi with shifting expansion point}
+   \subsubsection{Restarted Arnoldi}
+   The Arnoldi process computes a basis matrix $V_n$ for $\krylov{n}{\A}{r}$
+   using Grahm-Schmidt orthogonalization. Each new candidate vector $v_n$ must
+   be orthogonalized against every $v_j$ for $j=1,2,...,n-1$, which is computationally 
+   expensive
+   as $n$ gets large. One way to make the process more efficient is to 
+   restart the process after $\m$ steps.  Assuming we have a way to produce
+   strictly real basis vectors (which we do), $r$ restarted runs of $\m$ 
+   iterations yields the block matrix 
+   \[
+   \widehat{V}_n = \mat{V_1 && V_2 && \cdots && V_r},
+   \]
+   where each $V_j\in\R^{N\times \m}$ is orthogonal. We lose orthogonality 
+   between the blocks and as a result of restarting, the Arnoldi process will
+   ``forget'' and then ``re-discover'' information, which is inefficient 
+   and introduces redundancy (linear dependence) in $\widehat{V}_n$, causing
+   computation of the transfer function to be ill-conditioned.
+   
+   \subsubsection{Deflation/Thick Restarts}
+   Our solution to this end is to employ \emph{thick} restarts. Given one 
+   block Arnoldi matrix $V_k$ of length $\m$, we compute $A_\m$, $E_\m$ a la 
+   \eqref{eq:projections} and extract Ritz vectors $y_j$ and their
+   corresponding relative residuals \eqref{eq:rr}, \eqref{eq:approx_pole}. 
+   The Ritz vectors with low residuals form a (near) $\A$-invariant 
+   subspace $Y_k$ of $V_k$, and correspond to (nearly) converged poles 
+   that dominate \eqref{eq:Hv} and prevent further progression of the
+   Arnoldi process.  This process of distilling $V_k$ into its converged 
+   subspace $Y_k$ is known as \emph{deflation}.   
+   Alternatively, we can extract the invariant subspace 
+   using the generalized Schur (QZ) decomposition.  On the next run 
+   of the Arnoldi process, we eliminate this converged eigen-information
+   from the search by orthogonalizing potential Arnoldi vectors against 
+   $Y_j$ for $j=1,2,...,k$.  Depending on how many poles have converged thus
+   far, thick restarting is more computationally expensive than 
+   simple restarting, but still much less costly than orthogonalizing against 
+   every previously computed vector.
+   
+   \subsubsection{Experiments with shifting $\bm{s_0}$}
+   Deflation and assessment of converged poles presents the opportunity
+   to shift the expansion point $s_0$ to a location where faster 
+   convergence is desired.  Ideally the algorithm will be totally
+   adaptive based on discovery of new information as the process continues.
+   As of now, we have implemented a simple $s_0$ shifting scheme:
+   $s_0$ is purely imaginary and moves up the $i$-axis along the segment $S$
+   once per restart. The hope is that such a sweep will bring $s_0$ near any 
+   significant poles, for relatively fast convergence over $S$.  
+   
+   One preliminary result that looks promising is illustrated in 
+   figure~\ref{fig:ex308s1}.  The linearly moving $s_0$ scheme with 
+   thick restart ($r=4$ restarts of $\m=15$) yields a fairly accurate 
+   reduced model of size $n=60$.  To achieve the same accuracy with 
+   full (no restarts) Arnoldi
+   using a standard fixed $s_0=\pi\cdot 10^{10}$, we
+   need a reduced model of size $n=110$. 
+   Also included are examples of restarted
+   Arnoldi without $s_0$ shift, one resulting in a size $n=60$ model and 
+   the other, of size $n=110$.  In both cases the reduced models are not very 
+   good.
+   
+   A more in-depth assessment of computational cost for this scheme
+   compared to that of full Arnoldi is in order.  A major issue to 
+   take into account is that $\A$ and $R$ from \eqref{eq:singlematrixdefs}
+   depend on $s_0$. We must compute $R$ and possibly an LU decomposition
+   of $\A$ every time $s_0$ changes.  
+  
+	
+	\begin{figure}[htbp]
+		\centering
+		\subfloat[\label{sfig:full}Full Arnoldi,size $n=110$ model]
+			{\putfig{.48}{ex308s1_k110.png}}\hfill
+		\subfloat[\label{sfig:shift}Thick restarts $(\m=15,r=4)$, dynamic $s_0$, $n=60$]
+		    {\putfig{.48}{ex308s1_m15r4.png}}
+		
+		\subfloat[\label{sfig:noshift}Thick $(\m=15,r=4)$, static $s_0$, $n=60$]
+			{\putfig{.48}{ex308s1_m15r4noshft.png}}\hfill
+		\subfloat[\label{sfig:noshift}Thick $(\m=22,r=5)$, static $s_0$, $n=110$]
+			{\putfig{.48}{ex308s1_m22r5noshft.png}}			
+		\caption{A comparison of reduced models obtained via of full Arnoldi,
+		and thick restarted Arnoldi using $s_0$ shifts or not. The unreduced 
+		model being approximated,\texttt{ex308s1}, is of size $N=308$.}
+		\label{fig:ex308s1}
+   \end{figure}
+  
+\end{description}
+
+\clearpage
+%\begin{comment}    
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                               %
+%       Exam Syllabus Section   %
+%                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Proposed Exam Syllabus}
+	\begin{description}
+		\item[Linear Algebra:] Numerical Linear Algebra
+
+			\begin{itemize}
+				  
+				\item Matrix Computations, Orthogonalization, QZ Algorithm, 
+				Power Iterations, Iterative methods, Eigenvalue approximation,
+				Krylov Subspaces
+				\\
+				Reference: Golub and Van Loan: \emph{Matrix Computations}\cite{GVL}
+				\begin{itemize}
+				\item MAT 229A-C (now 226) \emph{Numerical Methods: Large Scale Matrix Computations}
+				\end{itemize}
+			
+				\item Model Reduction
+				\\
+				Reference: \emph{Model Order Reduction: Theory, Research Aspects and Applications}
+				\begin{itemize}
+					\item MAT 229C (now 226C) \emph{Numerical Methods: ODEs}
+				\end{itemize}
+			\end{itemize}
+
+ 
+		\item[Analysis:] $ $
+		
+			\begin{itemize}
+			
+		 		\item Metric, Banach, Hilbert Spaces, Bounded Linear Operators\\
+  					Reference: \emph{Applied Analysis}: Hunter, Nachtergaele 
+  				\begin{itemize}
+						\item MAT 201A,B \emph{Analysis}
+				\end{itemize}
+  				
+	
+        	\end{itemize}
+  
+		\item[Ordinary Differential Equations:] $ $
+		\begin{itemize}
+		   \item Bifurcation Theory, Nonlinear Dynamics\\
+		  	Reference: Steven H. Strogatz, \emph{Nonlinear Dynamics and Chaos}
+		  \begin{itemize}
+		  \item MAT 119A \emph{Ordinary Differential Equations}
+		  \end{itemize}
+		  
+        \end{itemize}
+
+	\end{description}
+
+% References  
+
+\nocite{eiermann_talk}
+\bibliographystyle{plain} 
+\bibliography{erensi_refs}
+
+\end{document}

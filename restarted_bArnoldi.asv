@@ -1,0 +1,307 @@
+function  [V URM_realization] = ROM_bArnoldi(ROM_realization, S0, J)
+
+% parameters
+dtol = sqrt(eps);
+ctol = dtol;
+keep_tol = 1e-4;
+rel_wt_tol = inf;
+ROI = [9 10];
+
+% Model setup
+A = ROM_realization.A;
+E = ROM_realization.E;
+B = ROM_realization.B;
+C = ROM_realization.C;
+
+N = size(A,1);
+VROM =  zeros(N,0);
+Y = zeros(N,0);
+flops = 0;
+
+for j = 1:length(S0)
+	s0 = S0(j);
+	ell(j) = size(Y,2);
+	[multH R] = make_SI_op(A,E,B,s0);
+	m = size(R,2) + ell(j);
+	fprintf('\ncycle %d expanding at s_0 = %s,  band_size = %d + %d \n',j,s0string(s0),size(R,2),ell(j));
+	
+	if isempty(Y)
+		result = band_Arnoldi(m,R,multH);  
+	else
+		% Process Y (thick-starting basis) and manually deflate the resulting candidates
+		result = band_Arnoldi(ell(j),[Y R],multH);
+		result.Vh_defl(:,1:ell(j)) = 0;  % force deflation of thick-started Ritz-vectors
+		result.flops = 0;
+	end
+	
+	% Continue iterating to J(j)
+	n0 = size(result.V,2);
+	result = band_Arnoldi(J(j)+ell(j),[Y R],multH,[],n0,result);
+	n = size(result.V,2);
+	
+	% count flops
+	flops = result.flops - ell(j)*N^2;        % we won't count cost of re-multipying Ritz-vectors
+	if ~isreal(s0)
+		flops = flops + 4 * flops;
+	end
+	
+	
+	% Determine Ritz-values for this cycle
+	[lambda, W, rr, Vd, F1, Vh, F2] = band_Arnoldi_Ritz(result);
+	rho2 = result.rho(:,(ell(j)+1):m);
+	cV = C'*result.V;
+	[mu wt] = ROM_poles(cV, W, rho2, lambda, s0, FRdomain);
+	
+	
+	converged = rr' < ctol;
+	ninf = d2S(mu,s) < 1e10;
+	in_ROI = imag(mu) > 0 & imag(mu) < 1e11;	
+	
+	% Set criteria for Ritz vectors to keep
+	rel_wt = wt / sum(wt);
+	keep = (rr' < keep_tol | rel_wt > rel_wt_tol);
+	
+	[rrsort idx] = sort(rr);
+	% 	fprintf('&$\\Re(\\mu)$ & $\\Im(\\mu)$ &\\texttt{rr} & wt & keep \\\\ \n \\hline \n')
+	% 	for i = 1:min(10,length(mu))
+	% 		fprintf('%d & \\texttt{%4.4e} &  \\texttt{%4.4e}i & %g & %g & %d \\\\\n',...
+	% 			i, real(mu(idx(i))),imag(mu(idx(i))),rr(idx(i)), wt(idx(i)), keep(idx(i)) );
+	% 	end
+% 	fprintf('\\hline\n');
+	ntot = size(VROM,2)+n-ell(j);
+	fprintf('... ROM: %d, n_tot: %d,   converged: %d,   keep: %d  weight: %g\n',...
+		n,ntot,nnz(converged), nnz(keep), sum(wt) );
+	
+	fprintf('...updating thick-restart basis...')
+	Znew = result.V*W(:,keep);
+	% 	Znew = [result.V*W(:,~converged & keep) real(result.V*W(:,converged & keep)) imag(result.V*W(:,converged & keep))];
+	[Y T] = add2basis(Y, T, Znew,dtol);
+	fprintf('dim Y = %d\n',size(Y,2));
+	
+	
+	VROM = [VROM result.V(:,ell(j)+1:n)];
+	j = j+1;
+end % of j-th cycle of outer loop
+
+
+%% Post basis-building analysis
+[V VROM_split] = make_basis_real(VROM);
+nreal = size(V,2);
+
+
+% Output ROM stats to the console
+fprintf('iterations: %d, ROM size: %d, LII: %g, rel-error: %g,  flops: %d + %dM\n\n',...
+	size(VROM,2),nreal,er2,tf_err,flops,length(J));
+
+
+
+
+
+% Compute tfunc-errors for truncated sub-bases of V from 1 to n
+h = waitbar(0,'contructing err vs n...');
+for n = 1:nreal
+	ROM_exp_FR = transfer_function(V(:,1:n),A,E,C,B,s);
+	[tf_err(n) tf_full(n,:)] = tfunc_err(URM_FR,ROM_exp_FR);
+	waitbar(n/nreal);
+end
+delete(h);
+
+%  plot full-error (fire plot)
+figure('name','fire')
+hp = plotfullerr(tf_full,tfunc_tol);
+title(sprintf('%s: explicit ROM full err',model_name));
+
+% plot frequency response norm-error
+figure('name','tf_err');
+semilogy(1:nreal,tf_err(1:n),'k.');
+line([1 nreal],[tfunc_tol tfunc_tol],'LineStyle',':');
+title(sprintf('%s: explicit ROM',model_name));
+
+
+
+
+
+
+%  Explicitly project system realization (A,E,B,C) onto V
+An = V'*A*V;  En = V'*E*V; Bn = V'*B; Cn = V'*C;
+
+% Plot explicit ROM poles
+[Z Mu] = eig(An,En);
+mu_exp = diag(Mu);
+
+%% compute residues/weights of explicit model
+Bh = colnorms((Z\Bn).');
+Ch = colnorms(Cn'*Z);
+residue = Bh(:) .* Ch(:);
+residue(isinf(mu_exp)) = 1;
+wt_exp = abs(residue) ./  (1+d2S(mu_exp,FRdomain));
+Z = V*Z;
+AZ = A*Z;
+rr_exp = colnorms(A*Z - E*Z*Mu) ./ colnorms(AZ);
+near_S =  d2S(mu_exp,s) < 1e11;
+
+% % Plot poles of explicitly projected ROM
+% figure('name','exp_poles')
+% plot_ROMpoles(mu_exp(near_S),S0,rr_exp(near_S),wt_exp(near_S),ROI,false(1,nnz(near_S)));
+% caxis([-3 0])
+% h2 = gca;
+% putaxis;
+% linkaxes([h1 h2]);
+% % try to match poles of the two different ROMs
+% for i = 1:length(mu)
+% 	[pole_diff idx] = min(abs(mu(i)-mu_exp));
+% 	rel_pole_diff(i) = pole_diff / abs(mu(i));
+% 	mu2(i) = mu_exp(idx);
+% 	rr2(i) = rr_exp(idx);
+% end
+% figure;
+% % disp([abs(mu(:)) rr(:) abs(mu2(:)) rr2(:) rel_pole_diff(:)]);
+% loglog(rel_pole_diff,rr(:),'o',rel_pole_diff,rr2(:),'.');
+% % line([1 nn],[ctol ctol],'LineStyle',':');
+% legend('implicit','explicit');
+% title(sprintf('%s ROM, n=%d: FR, err=%g',model_name,size(V,2),tf_err(n)));
+
+
+
+% %  plot transfer function surface
+% fprintf('creating surface...\n')
+% rzn.A = An;
+% rzn.E = En;
+% rzn.B = Bn(:,1);
+% rzn.C = Cn(:,2);
+% tfunc_surf_exp(rzn,S0,[200 200],[0 10 8 10.1 ],ROI);
+% set(gcf,'name','surf')
+% axis off
+% zoom on
+
+
+
+
+
+
+	function [mu wt] = ROM_poles(cV,W,rho,lambda,s0,FRdomain)
+		mu = 1./lambda + s0;
+		% Compute pole mass
+		f = colnorms(cV*W)';
+		g = colnorms((W\rho).')';
+		delta = abs(s0-mu) ./ (d2S(mu,FRdomain)+1);% note this
+		delta(isinf(mu)) = 1;
+		wt = delta .* f .* g;
+	end
+
+	function [lambda, W, rr_norm, Vd,F1, Vh, F2] = band_Arnoldi_Ritz(result)
+		% Exctract structures from this run of band-Arnoldi
+		nn = length(result.H);
+		H = result.H;
+		Vh_defl = result.Vh_defl;
+		Nn = size(Vh_defl,1);
+		Iv = result.Iv;
+		mc = result.mc;
+		normH_est = result.tol.normA;
+		
+		% Construct candidate vector residual rVh = Vh*[0 0 ... 0 I]
+		Vh = Vh_defl(:,Iv.ph); % extract remaining candidate vectors
+		if nn > mc
+			F2 = [zeros(mc,nn-mc) eye(mc)];
+		end
+		
+		% construct deflated vector residual rVd = Vd*[0 ... ej ... ek 0...0],
+		%   where j,k are locations of deflations.
+		d = Iv.nd;  % number of deflated vectors
+		Vd = zeros(N,0);
+		F1 = zeros(d,nn);
+		if d > 0
+			Vd = Vh_defl(:,Iv.pd); % deflated vectors
+			Ipos = Iv.I>0;  % positions of deflated vectors w/ positive index
+			F1(Ipos, Iv.I(Ipos) ) = 1;
+		end
+		
+		% Construct vector fT of total residual comlumn norms
+		[W D] = eig(H);  % Eigenvalue decomposition of Rayleigh-quotient H
+		lambda = diag(D);
+		fT = colnorms( (Vd*F1 + Vh*F2)*W );
+		rr_norm = fT ./ abs(lambda)';
+	end
+
+	function [err fullerr] = tfunc_err(URM_FR,ROM_FR)
+		Ls = size(URM_FR,3);
+		fullerr = zeros(1,Ls);
+		for i = 1:Ls
+			fullerr(i) = norm(URM_FR(:,:,i) - ROM_FR(:,:,i)) / norm(URM_FR(:,:,i));
+		end
+		err = norm(fullerr);
+	end
+	function plot_MIMO_tfunc(ROM_tfunc, URM_tfunc,FRdomain,ROMs)
+		nin = size(ROM_tfunc,1);
+		Ls = size(ROM_tfunc,3);
+		
+		if ~exist('ROMs','var')
+			plot_number = 1;
+			tot = nin*(nin+1)/2;
+			for i = 1:nin
+				for k = 1:i
+					URM = squeeze(URM_tfunc(i,k,:));
+					ROM = squeeze(ROM_tfunc(i,k,:));
+					h = subplot(tot,1,plot_number);
+					semilogy(FRdomain,abs(URM),'r-+',FRdomain,abs(ROM));
+					title(sprintf('(%d,%d), err=%g',i,k,norm(URM-ROM)/norm(URM)));
+					% 					saveas(gcf,sprintf('%s_%d%d.png',model_name,i,k))
+					if plot_number < tot
+						set(h,'XTick',[]);
+					end
+					plot_number = plot_number + 1;
+				end
+			end
+		else
+			tot = size(ROMs,1);
+			for plot_number = 1:tot
+				i = ROMs(plot_number,1);
+				k = ROMs(plot_number,2);
+				URM = squeeze(abs(URM_tfunc(i,k,:)));
+				ROM = squeeze(abs(ROM_tfunc(i,k,:)));
+				semilogy(FRdomain,URM,'r--',FRdomain,ROM);
+				title(sprintf('(%d,%d), err=%g',i,k,norm(URM-ROM)/norm(URM)));
+			end
+		end
+	end
+
+	function hp = plotfullerr(ferr,tfunc_conv_tol)
+		hp = contourf(FRdomain,(1:size(ferr,1)).',log10(ferr),32); % use contourf or pcolor
+		set(gca,'YDir','normal');
+		shading flat;
+		caxis([log10(tfunc_conv_tol) 0]);
+		colormap('hot');
+		colorbar;
+	end
+
+
+	function result2 = implicit_thick_start(Y,T,R)
+		nR = size(R,2); 	nY = size(Y,2);
+		result2.Iv.ph = circshift(1:nR,nY);
+		result2.Iv.I = [];
+		result2.Iv.pd = [];
+		result2.Iv.nd = 0;
+		result2.m = nR;
+		result2.mc = nR;
+		result2.n0 = nY;
+		result2.V = Y;
+		result2.H = T;
+		result2.Vh_defl = [zeros(size(Y)) R];
+		result2.rho = eye(nY);
+		% make Vh_defl orthogonal to Y
+		for k = 1:nY
+			for i = 1:nR
+				result2.rho(k,i+nY) = Y(:,k)' * result2.Vh_defl(:,i+nY);
+				result2.Vh_defl(:,i+nY) = result2.Vh_defl(:,i+nY) - result2.rho(k,i+nY) * Y(:,k);
+			end
+		end
+		result2.flops = 0;
+		result2.tol.defl_flag = 1;
+		result2.tol.defl_tol = sqrt(eps);
+		result2.tol.normA_flag = 1;
+		result2.tol.normA = 1;
+		result2.exh_flag = 0;
+	end
+
+end % main
+

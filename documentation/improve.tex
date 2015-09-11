@@ -1,0 +1,50 @@
+\subsubsection {Improving nearly-invariant subspace}
+ Note that an approximate eigenspace of $\H_k$  is also an approximate eigenspace of $\H_{k+1}$, although to a lesser degree   (more precise bounds are given in Section~\ref{sec:blub}), so it suffices to show that given an approximately invariant subspace, we can iteratively improve the approximation.  
+
+\medskip 
+Suppose we have determined an approximate eigenspace of $\H$ so that for a Ritz-pair ($z,\lambda$)   (with $\|z\|=1$),
+\[
+\H z = \lambda z + \gamma,
+\]
+and $\nrm{}{\gamma}$ is small but not zero, i.e. $\lambda$ is not an eigenvalue of $\H$.
+Consider 
+\begin{equation}
+\H (z+\Delta z) = \lambda z + \Delta \lambda z + \lambda \Delta z
+\label{eq:aprx1}
+\end{equation}
+where $z^H \Delta z = 0$ and  $\Delta z\in \C^n$ and $\Delta \lambda\in \C$, and suppose that $\Delta \lambda \Delta z$ is  small.  Then 
+\begin{equation}
+\H (z+\Delta z) \approx (\lambda+\Delta \lambda)(z + \Delta z).
+\label{eq:aprx2}
+\end{equation}
+
+It follows from \eqref{eq:aprx1} that 
+\begin{equation*}
+\Delta z = -z + \Delta \lambda (\H-\lambda I)^{-1}z.
+\end{equation*}
+Then  $z^H \Delta z = -1 + \Delta \lambda z^H(\H-\lambda I)^{-1}z=0$ implies that 
+\[
+\Delta \lambda = \frac{1}{z^H(\H-\lambda I)^{-1}z}.
+\]
+Then for $x=(\H-\lambda I)^{-1}z$ the approximation \eqref{eq:aprx2} is equivalent to 
+\begin{equation*}
+\H \tilde{z} \approx \tilde{\lambda}\tilde{z},  
+\end{equation*}
+where $\tilde{z}=x/\nrm{}{x}$ and 
+$ \tilde{\lambda}= \lambda + 1/z^H x$.
+
+The primary drawback to this procedure is the expense of solving $(\H-\lambda I)x=z$ for $x$, which we must
+do separately for each Ritz-pair to be adjusted.
+
+  Recall that $\H = (A - \xp^{(2)} E)^{-1} E$, but we do not explicitly form it.  The solve we want to do can be achieved with $\left[(1-\lambda\xp^{(2)})E - \lambda A \right]z = (A - \xp^{(2)} E)x$. Another option is to somehow exploit the expansion
+\[
+x=(\H-\lambda I)^{-1}z = -\lambda\left(I-\frac{1}{\lambda}\H\right) ^{-1}z
+=-\lambda \sum_{j=0}^\infty \frac{1}{\lambda^j}\H^j z.
+\]
+
+The correction can be defined recursively as 
+\[
+z_{j+1} =\frac{(\H-\lambda I)^{-1}z_j}{\nrm{}{(\H-\lambda I)^{-1}z_j}}, 
+\]
+
+This is basically the inverse iteration! also known as Rayleigh quotient iteration.

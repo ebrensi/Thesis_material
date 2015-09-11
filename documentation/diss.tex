@@ -1,0 +1,55 @@
+\documentclass[letterpaper,notitlepage,11pt]{report}
+\usepackage{fullpage}
+\usepackage[nodisplayskipstretch]{setspace}
+\usepackage{chngcntr}
+
+
+\input{doc_macros.tex}
+\input{doc_macros2.tex}
+
+\newcommand{\putfig}[3][{}]{\includegraphics[width=#2\textwidth,keepaspectratio]{figs/#3}}
+%\renewcommand\bibname{References}
+ 
+\setcounter{tocdepth}{4}
+%\setcounter{secnumdepth}{3}
+\newcommand{\mytitle}{A Thick-Restarted Krylov Subspace Method \\ for \\ MIMO Model Order-Reduction}
+
+% \numberwithin{equation}{chapter}
+\counterwithout{equation}{section} 
+\counterwithout{equation}{chapter} 
+
+\renewcommand{\thepage}{\roman{page}}% Roman numerals for page counter
+
+%\makeindex
+\begin{document}
+ \author{Efrem Rensi}
+\title{\mytitle}
+%\date{Last update: \ \currenttime, \today}
+%\maketitle
+
+\input{TitlePage}
+
+\doublespacing 
+\clearpage
+\input{abstract.tex}
+
+
+\singlespacing
+\tableofcontents
+\clearpage
+
+\doublespacing
+\section*{Acknowledgments}
+\input{thanks.tex}
+\clearpage
+
+\renewcommand{\thepage}{\arabic{page}}% Arabic numerals for page counter
+\setcounter{page}{1}% Start page number with 1
+\input{diss_text.tex}
+
+\singlespacing
+\input{references.tex}
+
+%\printindex
+
+\end{document}

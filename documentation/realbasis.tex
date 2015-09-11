@@ -1,0 +1,269 @@
+% !TeX root = doc.tex
+
+\subsection{Obtaining a suitable real basis for subspace projection}\label{sec:makingrealV}
+For expansion (interpolation) point $\xp\in\C$ and real matrices $\A,\E\in\R^{N\times N}$,
+$\BB\in\R^{N\times \nin}$,
+the matrix pair
+\begin{equation*}
+			\H := (\A-\xp \E)^{-1}\E,\qquad \RR := (\xp \E - \A)^{-1}\BB	
+\end{equation*}
+is used by the block or band Arnoldi process to generate a real basis $V\in\R^{N\times n}$
+for a space such that $\A_n=V^T\A  V$,$\E_n=V^T \E V$, $\BB_n=V^T \BB$, and $\CC_n=V^T \CC$ yield a reduced order model that is known approximate the full model in some sense.
+
+For $\xp\in\R$ (real) we let $\V:=V$, where $V$ spans the Krylov subspace induced by $\H$
+and $\RR$:
+\begin{equation}
+   	 \krylov{n}{\H}{\RR}:= \text{span} \left\{\RR, \H \RR, \H^2\RR,\ldots, \H^{n-1}\RR\right\}.
+   	 \label{eq:Kdef}
+\end{equation}
+The dimension of \eqref{eq:Kdef} is $\nblock \leq n\nin$.
+
+For general complex $\xp$, matrices $\H=\H(\xp)$ and $\RR=\RR(\xp)$ are
+complex and thus so is $V$.  In order to
+ensure passivity and physical viability of the reduced model, $\V$ must be real, so
+we generally cannot obtain a satisfactory model via projection with $V$ when
+using a complex expansion point.
+
+\subsection{Paired Complex Conjugate (PCC) Krylov subspace}
+Grimme \cite{grimme97} brings up a method suggested by Ruhe in \cite{ruhe1994rational}
+to obtain real $\V$ from $V$.  It involves considering  $\xp$ and its complex-conjugate $\conj{\xp}$ pairwise.  The two Krylov subspaces $\krylov{n}{\H}{\RR}$
+(note $\eta\geq n$) and  $\krylov{n}{\conj{\H}}{\conj{\RR}}$ have complex conjugate bases: If
+ $V = \Set{v_1, v_2, \cdots,v_\nblock}$ spans
+$\krylov{n}{\H}{\RR}$, then the set of conjugate vectors
+$\conj{V}= \Set{\conj{v}_1, \conj{v}_2, \cdots,\conj{v}_\nblock}$ spans
+$\krylov{n}{\conj{\H}}{\conj{\RR}}:=\krylov{n}{\H(\conj{\xp})}{\RR(\conj{\xp})}$.
+Then there exists a purely real basis for the subspace
+\begin{equation}
+	\begin{aligned}
+	\krylov{n}{\H}{\RR}^*
+	&= \spn\krylov{n}{\H}{\RR} \ \cup\ \krylov{n}{\conj{\H}}{\conj{\RR}}\\
+	&= \spn\Set{\RR, \conj{\RR}, \H \RR, \conj{\H \RR}, \H^2\RR, \conj{\H^2\RR},
+		\ldots,\H^{n-1}\RR, \conj{\H^{n-1}\RR} },
+	\end{aligned}
+\label{eq:splitK}
+\end{equation}
+which we will refer to as the \emph{Paired Complex Conjugate (PCC)-Krylov}  subspace induced
+by $\H$ and $\RR$. Note that \eqref{eq:splitK} indicates a complex span (over $\C$)
+but the basis vectors are real. The dimension $\nblocksplit$ of \eqref{eq:splitK} is bounded
+by
+\begin{equation}
+n\leq\nblocksplit\leq 2\nblock\leq 2n\nin.
+\label{eq:basissizes}
+\end{equation}
+
+
+The subspace $\krylov{n}{\H}{\RR}^*$ contains the Krylov subspaces associated with both
+expansion points
+$\xp$ and $\conj{\xp}$, so projecting on to it yields a ROM that matches moments about two points
+simultaneously (for nearly the computational cost of one). The complex conjugate
+$\conj{\xp}$ of expansion point $\xp$, unlike $\xp$, is not near the region of interest
+so accuracy of the reduced model near $\conj{\xp}$ is not necessary nor helpful;
+rather, the primary benefit of this
+technique (\emph{double shifting}) is that the set
+of vectors $\V$ is real.
+
+\bigskip
+\begin{notation} We will refer to $V$ as both a list of vectors $V = (v_1, v_2, \cdots,v_\nblock)$,
+and the matrix $V=\mat{v_1 & v_2 & \cdots & v_\nblock}$ with vectors $v_j$ as columns.
+We define an operator `*' (read `split') on a set of vectors $V$ indicating the set of real
+vectors formed by the real and imaginary parts of $V$
+(here denoted by  $\Re(V):=\operatorname{Re}(V)$ and $\Im(V):= \operatorname{Im}(V)$)
+\[
+V^* :=  \Re(V) \,\cup\, \Im(V) = \Set{ \Re(v) \,\cup\, \Im(v) | v\in V}
+\]
+
+We define `*' similarly for a vector space $S$.  If $S = \spn{V}$ (spanned over $\C$),
+\begin{align*}
+	S^* &:= \spn{V^*} \\
+	&\ = \spn{\Re(V) \,\cup\, \Im(V)} \\
+	&\ = \spn{V \cup \conj{V}\,},
+\end{align*}
+where $\conj{V}$ is the complex conjugate of $V$.
+
+Finally, V $\equiv$ W indicates that the sets $V$ and $W$ span the same space. i.e.
+$\spn{V} = \spn{W}$.
+\end{notation}
+\bigskip
+
+
+
+
+\subsection{Constructing a real basis for a complex Krylov subspace}
+\label{sec:makingrealbasis}
+
+\subsubsection{Straightforward implementation}\label{sec:naive}
+The most straightforward way to generate a basis $\V_n$ for the PCC-Krylov susbspace
+\eqref{eq:splitK}
+ consists of first performing $n$ iterations of band-Arnoldi to generate the orthogonal basis
+ $V_n = (v_1 , v_2 , \ldots , v_\nblock)\subset \C^{N}$ for $\krylov{n}{\H}{\RR}$,
+ splitting the entire set $V$ into
+ \begin{align}
+  V_n^* &:= \mat{\Re(v_1) & \Im(v_1) & \Re(v_2) & \Im(v_2) & \cdots & \Re(v_\nblock) & \Im(v_\nblock)}
+  \in \R^{N \times 2\nblock}
+ \label{eq:split1}
+ \end{align}
+ and then forming a basis $\V$ for \eqref{eq:splitK}, via orthogonalization
+ of $V_n^*$
+ \begin{equation}
+  	\V := \text{orth}(V_n^*) \in \R^{N \times \nblocksplit},
+  	\label{eq:Vorth}
+ \end{equation}
+ since $V^*$ is not orthogonal and generally not linearly independent.  The method
+ implied by \eqref{eq:split1}, \eqref{eq:Vorth} requires
+ $n$ steps of Arnoldi (with complex matrices and vectors)
+ and an orthonormalization procedure on $\tilde{\nblock}\leq 2np$ real vectors.  This can be
+ done with the Gram-Schmidt process ($QR$ factorization of $V_n^*$). Note that in finite precision
+ arithmetic, the order of vectors in \eqref{eq:split1} is significant.  We assume that
+ they are ordered as shown.
+
+ \subsubsection{Implementation via equivalent real formulation}\label{sec:eqreal}
+ A more efficient way to generate a basis for \eqref{eq:splitK} is to perform the
+ Arnoldi process with the \emph{equivalent real form} \cite[Sec. 5]{cplxMatrix},
+ \cite[`$K1$-formulation']{day_heroux} of \eqref{eq:singlematrixdefs}.  i.e. compute
+ a basis for $\krylov{n}{\Heq}{\Req}\subset\R^{2N}$, where
+ \begin{equation}
+ \Heq = \mat{\Re(\H) & -\Im(\H)\\ \Im(\H) & \Re(\H) }
+ \quad\text{and}\quad \Req = \mat{\Re(\RR)\\\Im(\RR)}.
+ \label{eq:equiv_real}
+ \end{equation}
+
+ A basis
+ \begin{equation}
+ \Veq_n  = \mat{\veq_1&\veq_2&\cdots&\veq_{\nblockeq}} \in\R^{2N \times \nblockeq}
+ \label{eq:equiv_real_basis}
+ \end{equation}
+
+ for  $\krylov{n}{\Heq}{\Req}$ consists of $\nblockeq\leq n\nin$ vectors
+\[  \veq = \mat{\tp{\veq}\\\bt{\veq}}
+\]
+
+ where $\tp{\veq},\bt{\veq}\in\R^N$ are the \emph{top} and \emph{bottom} parts of $\veq$.
+ We define the split of the equivalent-real basis \eqref{eq:equiv_real_basis} to be
+ \begin{equation}
+ \Veq_n^* : = \mat{\tp{\veq}^{(1)} & \bt{\veq}^{(1)} & \tp{\veq}^{(2)} & \bt{\veq}^{(2)}
+	 & \cdots & \tp{\veq}^{(\nblockeq)} & \bt{\veq}^{(\nblockeq)} }
+ 	\in \R^{N \times 2\nblockeq}.
+ \label{eq:split2}
+ \end{equation}
+
+It is not difficult to show that
+\[
+\spn{\Veq_n^*} = \krylov{n}{\H}{\RR}^*
+\]
+(see \ref{sec:equivbases}), and
+computing \eqref{eq:split2} requires half the operations of computing \eqref{eq:split1}
+(Sec.~\ref{sec:eqrealcheaper}).
+ Furthermore, \eqref{eq:split2} arguably provides a more numerically accurate basis for
+ $\krylov{n}{\H}{\RR}^*$
+ than \eqref{eq:split1}
+ due to the reduced number of arithmetic operations involved in computing it.
+\bigskip
+
+
+
+\begin{comment} %%%%%
+
+\subsection{Direct production of real basis}\label{sec:direct}
+Can we produce a real basis $\V$ for $\krylov{n}{\H}{r}^*$ without
+the computational and storage costs of computing a complex (or
+equivalent real) basis for $\krylov{n}{\H}{r}$?  This may be possible,
+but is still an open problem.  It may be helpful to understand
+how and why the
+standard (complex) Arnoldi iteration works.
+
+
+
+\subsubsection{Basic Arnoldi iteration}
+Given $\H\in\C^{N\times N}$ and $r\in\C^N$, Arnoldi process generates an orthonormal
+set
+$V = \Set{v_1,v_2,\ldots,v_{k+1}}\subset C^N$  and
+coefficient matrix $[h_{jk}]$
+such that $\H v_k = \sum_{j=1}^{k+1} h_{jk}v_j$ for $1\leq k \leq n-1$. This
+suggests the recursion
+\begin{equation}
+h_{k+1,k+1}v_{k+1} = \H v_k - \sum_{j=1}^k h_{jk} v_j, \quad\text{where}\quad
+h_{jk} = v_j^H(\H v_k).
+\label{eq:arnoldi_iter}
+\end{equation}
+Note: In exact arithmetic, using $\hat{h}_{jk}=\text{Re}\left( h_{jk}\right)$
+in place of $h_{jk}$ results in
+Arnoldi computing equivalent vectors in both standard complex and equivalent
+real formulations. i.e. $v_j = v_{1j} + iv_{2j}$, where  $v_{1j}, v_{2j}$ are
+from \eqref{eq:equiv_real_basis}.
+
+As a result, $\H^{k-1} r \in \spn{v_1,v_2,\ldots,v_k}$, so
+\begin{align*}
+v_k &= \gamma_0 \H^{k-1}r + \sum_{j=1}^{k-1}\gamma_j v_j\\
+\H v_k &= \gamma_0 \H^{k}r + \sum_{j=1}^{k-1}\gamma_j \H v_j\\
+\H^k r &= \gamma_0\H v_k + \sum_{j=1}^{k-1}\gamma_j \H v_j\\
+	   &=  \gamma_0\H v_k + \sum_{j=2}^{k}\eta_j  v_j\\
+	   &= \eta_0 v_{k+1} + \sum_{j=2}^{k}\eta_j  v_j\\
+\end{align*}
+
+\clearpage
+\subsection{Remaining questions to be answered}
+Here are some problems that may be worth investigating:
+
+\begin{enumerate}
+\item Can we construct a basis for \eqref{eq:splitK} directly, as suggested in Sec.~\ref{sec:direct}?
+\item Are there any other (better) ways to construct a real basis for \eqref{eq:splitK}?
+\end{enumerate}
+
+
+
+
+\subsection{Scaling matrices for better numerical precision}
+As noted in \cite[remark 13]{posreal}, if matrices $A$ and $E$ have norms of significantly
+different orders of magnitude, numerical accuracy of computing eigenvalues of the pencil
+$A-\mu E$ can be improved by scaling one of the matrices.  The re-scaled pencil is
+$ A-(\mu /\tau) (\tau E) $, where $\tau$ is chosen so that the norms of $A$ and $\tau E$ are
+of the same order.
+
+\subsection{some results of numerical experiments}
+
+\end{comment}  %%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%5
+\subsection{Combined PCC-Krylov subspaces}
+So far we have discussed obtaining a basis for  the PCC-Krylov subspace $\krylov{n}{\H}{\RR}^*$
+induced by a matrix $\H$ and starting block $\RR$ given by \eqref{eq:singlematrixdefs}.
+Now, suppose we have several multiplier matrices
+$\H_1, \H_2,...,\H_k\in\C^{N\times N}$
+and starting-block matrices $\RR_1,\RR_2,...,\RR_k\in\C^{N\times p}$
+whose induced Krylov subspaces converge to the same space
+\[
+\krylov{\widetilde{N}}{\H_1}{\RR_1} = \krylov{\widetilde{N}}{\H_2}{\RR_2}
+= \cdots = \krylov{\widetilde{N}}{\H_k}{\RR_k}
+\quad \text{for some }\widetilde{N}\leq N
+\]
+(so that we expect significant overlap in their bases), and
+we want to compute a basis  for a space
+$\V$ with the property that
+\[
+	\bigcup_{j=1}^{k}\krylov{n_j}{\H_j}{\RR_j}^* \subset \V,
+\]
+i.e. the space $\V$ contains every PCC-Krylov subspace that would be constructed via
+$n_j$ iterations of the band-Arnoldi process on $\H_j$ and $\RR_j$, for $j=1,2,...,k$.
+A straightforward way to produce such a basis is to construct a sequence of
+spanning sets $V_j$, where
+\[
+\spn V_1 = \krylov{n_1}{\H_1}{\RR_1},
+\]
+and for $j\geq 2$
+\[
+\spn V_j = \krylov{n_j}{\H_j}{\RR_j} \setminus \spn\{V_1,V_2,...,V_j\}.
+\]
+
+Then
+\begin{equation}
+	\V = \spn\left\{V_1^*, V_2^*, \ldots, V_k^*\right\}
+	= \spn\left\{ V_1, V_2, \ldots, V_k\right\}^*
+\label{eq:basesComb}
+\end{equation}
+\begin{note}
+Replacing each $\H_j$ and $\RR_j$  with their equivalent-real
+forms $\Heq_j$, $\Req_j$ (see Sec.~\ref{sec:eqreal})
+yields the same space  \eqref{eq:basesComb}, so without loss of generality we
+use the simpler notation to represent either formulation.
+\end{note}
+

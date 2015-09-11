@@ -1,0 +1,709 @@
+\documentclass{beamer}
+
+\mode<presentation>
+{   \usetheme{Boadilla}
+	\useinnertheme{circles}
+	\usecolortheme{crane}
+  
+  % or ...
+  %\setbeamercovered{transparent}
+  % or whatever (possibly just delete it)
+}
+
+\usepackage{bm,verbatim,graphicx,datetime,relsize}
+\usepackage[english]{babel}
+\usepackage[latin1]{inputenc}
+\usepackage{times}
+\usepackage[T1]{fontenc}
+% Or whatever. Note that the encoding and the font should match. If T1
+% does not look nice, try deleting the line with the fontenc.
+
+
+%% ----------------------
+% macros and other settings for my qual proposal and talk
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\A}{\widehat{H}}
+\newcommand{\m}{m}    % number of steps before restart in restarted Arnoldi
+\newcommand{\nin}{p}  % number of inputs/outputs to the model
+\newcommand{\reig}{\tilde{\lambda}}
+\newcommand{\rpol}{\tilde{\mu}}
+\newcommand{\bigO}[1]{\mathcal{O}\left( #1 \right)}
+\newcommand{\krylov}[3]{\mathcal{K}_{#1}\left({#2},{#3} \right)}
+\newcommand{\colspan}{\mathrm{colspan}\,}
+\newcommand{\mat}[1]{\begin{bmatrix} #1\end{bmatrix}}
+\newcommand{\nrm}[2]{\left\| #2 \right\|_{#1}}
+\newcommand{\issue}[1]{\textcolor{red}{\bf \large #1}}
+
+\theoremstyle{remark}    
+    \newtheorem*{conjecture*}{Conjecture}
+    
+\usdate  % format for \today
+\settimeformat{ampmtime}
+%%% ---------------
+
+%\newcommand{\putfig}[3][{560 420}]{\includegraphics[bb=0 0 #1, width=#2\textwidth]{./talkfigs/#3}} % for DVI (latex)
+\newcommand{\putfig}[3][{}]{\includegraphics[width=#2\textwidth]{./talkfigs/#3}} % for PDF (pdflatex)
+
+\title[Restarted Krylov for ROM] % (optional, use only with long paper titles)
+{Restarted Krylov subspace model-reduction methods for 
+		RCL circuit simulation}
+
+%\subtitle
+%{Presentation Subtitle} % (optional)
+
+\author[]{Efrem Rensi}
+
+\institute[E. Rensi]%[U.C. Davis]
+{
+  GGAM, Department of Mathematics\\
+  University of California, Davis
+}
+\date[Qual] % (optional)
+{\formatdate{3}{6}{2009} / Qualifying Exam}
+
+\subject{erensi qualifying exam talk}
+% This is only inserted into the PDF information catalog. Can be left
+% out. 
+
+% Delete this, if you do not want the table of contents to pop up at
+% the beginning of each subsection:
+\AtBeginSubsection[]
+{
+  \begin{frame}<beamer>{Outline}
+    \tableofcontents[currentsection,currentsubsection]
+  \end{frame}
+}
+
+
+% If you wish to uncover everything in a step-wise fashion, uncomment
+% the following command: 
+%\beamerdefaultoverlayspecification{<+->}
+
+% *****************************************************
+\begin{document}
+
+\begin{frame}
+  \titlepage
+  \begin{figure}
+  	     \centering
+  	     	\putfig[{324 149}]{0.30}{IO.png}
+     \end{figure}
+\end{frame}
+
+\section{Background}
+
+\begin{comment}
+\begin{frame}{Outline}
+  \tableofcontents
+  % You might wish to add the option [pausesections]
+\end{frame}
+\end{comment}
+
+\begin{frame}{Primary application}{Reduced size, physically viable RLC circuit models}
+	 \begin{figure}
+		 \centering
+		 \putfig[{723 543}]{.85}{ttt.png}
+	 \end{figure}
+\end{frame}
+
+
+\begin{frame}{Model Represented as DAE}{(Differential Algebraic Equation)}
+  % - A title should summarize the slide in an understandable fashion
+  %   for anyone how does not follow everything on the slide itself. 
+   \emph{Input-Output} system
+   \begin{equation*}  
+   \begin{array}{c}
+   u_1(t)\quad\longrightarrow \\ u_2(t)\quad\longrightarrow\\ \vdots\\u_\nin(t)\quad\longrightarrow
+   \end{array}
+  \quad
+  \boxed{\large
+ 	    \begin{aligned}
+ 	    \\
+ 			\quad Ex' &=  Ax + Bu\quad\\
+ 			y &= B^Tx,\\
+ 			\\
+ 		\end{aligned}	
+      }
+  \quad	
+		 \begin{array}{c}
+	 \longrightarrow\quad y_1(t)\\ \longrightarrow\quad y_2(t)\\ \vdots\\\longrightarrow\quad y_\nin(t)
+   \end{array} 
+ \end{equation*}
+ where $A,E\in\R^{N\times N}$ are sparse, $B\in\R^{N\times \nin}$.
+ 
+ \begin{itemize}
+   \item $N \gg \nin$ typically large, e.g. $N=\bigO{10^{9}}$
+   \item $x(t)\in\R^N$ (\emph{state-space} variable) represents internal state.
+   \item \emph{Behavior} of model: $y=F(u)$
+   \end{itemize}
+ \end{frame}
+
+
+
+\begin{frame}{Transfer Function}{Relates Output directly to Input}
+    In the frequency domain, $Y(s) = H(s)U(s)$ with \emph{transfer~function}
+ 	 \[
+ 		H(s) =  B^T(sE-A)^{-1}B \quad\in\quad (\C\cup\infty)^{\nin \times \nin}
+ 	\]
+ 	\begin{figure}
+	     \centering
+	     	\putfig{0.55}{ex1841s1_urm_tfunc.png}
+	     	\caption{$\|H(s)\|$ vs. frequency for $N=1841$ test model}
+     \end{figure}
+ \end{frame}
+ 
+ 
+ 
+ 
+ \begin{frame}{Transfer Function}{Domain $S\in\C$}
+  We consider $H(s)$ over $s\in S$.
+  \[
+  		S = 2\pi if,\quad f\in\left[f_\mathrm{min},f_\mathrm{max}\right]
+  \]
+     \begin{figure}
+     \centering
+     	\putfig{0.48}{ex1841s1_urm_tfuncS.png}\hfill
+     	\putfig[{570 402}]{0.48}{Splane2.png}
+     	%\caption{}
+     \end{figure}
+ \end{frame}
+
+ 
+ 
+ \begin{frame}{Transfer Function}%{$H(s) =  B^T(sE-A)^{-1}B$}
+   Transfer function 
+  \[  H(s) =  B^T(sE-A)^{-1}B  \]
+	  \begin{itemize}
+		  \item $H(s) \in (\C\cup\infty)^{\nin \times \nin}$ is relatively small
+		  \item Explicitly computing $H(s)$ is not feasible! 
+		  \item But computing
+		   \[ 
+				H_n(s) = B_n^T(sE_n-A_n)^{-1}B_n  
+				\quad \in \quad(\C\cup\infty)^{\nin \times \nin}
+		   \]
+			is \emph{easy} for small $A_n,E_n\in\R^{n\times n}$, 
+			$B_n\in\R^{n\times \nin}$, where $n\ll N$.
+	   \end{itemize}
+\end{frame}
+ 
+ 
+ 
+\begin{frame}{Reduced model via projection}
+	\begin{itemize}
+		\item Project $A$,$E$,$B$ onto a subspace of $\R^N$.   
+			\[
+			 A_n := V_n^TAV_n, \quad E_n := V_n^TEV_n, \quad B_n := V_n^TB,
+			\]
+		where $V_n\in\R^{N\times n}$ has full rank  
+		\bigskip 
+		
+		\item Reduced model transfer function: 
+		\[ H_n(s)=B_n^T(sE_n-A_n)^{-1}B_n \]
+	\end{itemize}      
+\end{frame}
+  
+  
+  
+\subsection{Moment-matching}
+
+\begin{frame}{Transfer function}{Single-matrix formulation}
+Let $s_0\in\C$ be a point for which $s_0E-A$ is invertible.\\
+$H(s)$ can be re-expressed as  
+	\begin{align*}
+			H(s) &= B^T(sE-A)^{-1}\\
+			    &= B^T\left[(s-s_0)E +s_0E- A\right]^{-1}B\\
+				&= \alert{B^T\left(I-(s-s_0)\A\right)^{-1}R} 
+	\end{align*}
+where 
+\[ \A := -(s_0E-A)^{-1}E\quad\text{and}\quad R := (s_0E-A)^{-1}B. \]
+(\alert{\emph{Single matrix formulation}})
+
+\end{frame}
+
+
+
+\begin{frame}{Moments of the transfer function about $s_0$}%
+  Single-matrix formulation: $H(s) = B^T\left(I-(s-s_0)\A\right)^{-1}R$
+  \smallskip
+  
+  Via Neumann (geometric series) expansion, 
+  		\begin{align*}
+  			H(s) &= B^T\left(\sum_{j=0}^\infty (s-s_0)^j\A^j\right)R\\
+  				 &= \sum_{j=0}^\infty (s-s_0)^jM_j
+  		\end{align*}   
+  		where $M_j =  B^T\A^j R$.
+  		
+  \begin{itemize}
+  		\item This is exactly the Taylor series expansion about $s_0$\ !
+  		\item $M_j$ are \emph{moments} (i.e. derivatives) of $H(s)$ at $s_0$	
+  \end{itemize}   
+\end{frame}
+ 
+ 
+ 
+ 
+\begin{frame}{Moment matching}{}
+  Taylor series of $H(s)$ about  $s_0$:
+  	\[ H(s) = \sum_{j=0}^\infty (s-s_0)^jM_j \]
+ 	with moments $M_j =  B^T\A^j R$.
+ 	\medskip
+ 	
+ 	\begin{itemize}
+ 	    \item Reduced model $H_n(s)$ will \emph{match $n$ moments} about $s_0$. 
+ 	    \uncover<1>{\[ H_n(s) =  H(s) + \bigO{(s-s_0)^n} \]}
+ 	    %		\item (Our approximations are of Pad\'e-type)
+	  	\item<2-> Natural home for $H_n(s)$ is the $n$-th \emph{block-Krylov} subspace
+	  		\[ 
+	  		\krylov{n}{\A}{R}:= \text{span}\left\{R,\A R,\A^2R,\ldots,\A^{n-1}R\right\}
+	  		\]
+  	\end{itemize}			
+\end{frame}
+ 
+ 
+
+ 
+ 
+ \begin{frame}{Krylov subspace projection:}{Overview}
+ 
+	 \begin{itemize}
+		\item Pick $s_0\in\C$, compute matrices $\A(s_0)$, $R(s_0)$
+		\item Generate a full rank matrix $V_n\in\R^{N\times n}$ such that
+		\[ \krylov{n}{\A}{R} \subseteq \text{colspan} V_n \]
+		\item Compute projections \[ A_n := V_n^TAV_n,\ \text{etc}.\]
+		\item Reduced order model is \[ H_n(s)=B_n^T(sE_n-A_n)^{-1}B_n \]
+	 \end{itemize}
+ 
+ \end{frame}
+
+
+
+
+\subsection{Pole matching}
+
+\begin{frame}{Pole decomposition of model}
+Poles of $H(s)$ are $\mu\in\C\cup\infty$ such that $\nrm{}{H(\mu)}=\infty$. 
+	\begin{figure}[htbp]
+		\centering
+			\putfig{.70}{ex1841s1_urm_tfunc.png}
+			\caption{$\|H(s)\|$ vs. frequency ($s=2\pi i f$)}
+	\end{figure}
+\end{frame}
+
+
+
+\begin{frame}{Pole decomposition of model}{Example: poles of a size $N=1841$ test model}
+	\begin{figure}[htbp]
+		\centering
+			\putfig[{735 420}]{.90}{ex1841s1_poles_semilog.png}
+			\\ $\log_{10}$ scale on Re axis. Dot size indicates dominance.
+	\end{figure}
+\end{frame}
+
+
+
+\begin{frame}{Pole-residue decomposition of model}{Poles as eigenvalues of $sE-A\in\R^{N\times N}$}
+	\begin{itemize}
+		\item Transfer function: $ H(s)=B^T(sE-A)^{-1}B $
+		\smallskip 
+		
+		\item If  $sE-A$ has full set of $N$ eigenvectors, eigenvalues $\mu_j$\\
+	     then  
+	     \begin{equation}
+	     	H(s)= X_\infty+ \sum_{j=1\atop{\mu_j\neq\infty}}^N \frac{X_j}{s-\mu_j}\tag{$\star$}
+	     	\label{eq:polesum}
+	     \end{equation}
+	    \item $\mu_j\in\C\cup\infty$ are the poles of $H(s)$. $X_j$ are residues.
+	    \item \emph{Dominant poles} associated with terms that dominate \eqref{eq:polesum}
+	    on~$S$.
+	\end{itemize}
+\end{frame}
+
+
+
+
+\begin{frame}{Pole decomposition example}{Model size $N=1841$. Truncated at $12$ terms}
+	\begin{figure}[htbp]
+		\centering
+		\putfig{.49}{ex1841s1_urm_10tfunc.png}\hfill
+		\putfig{.49}{ex1841s1_10poles.png}
+	\end{figure}
+	
+	\begin{itemize}
+		\item Dominant poles determine features of the model on $S$.
+		\item Ideally, reduced model consists of these dominant poles.
+ 	\end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{Background Summary}  
+    \begin{itemize}
+    	\item Krylov subspace projection yields 
+    	locally accurate approximate model around $s_0\in\C$.
+    	\medskip
+    	
+    	\item We want to place $s_0$ for convergence near dominant poles. 
+    	\medskip
+    	
+    	\item We do not know where dominant poles are. 
+    \end{itemize}    
+\end{frame}
+
+
+
+
+\begin{frame}{Local convergence}{Visual example: $N=308$, Reduced model $n=15$}
+	\begin{figure}[htbp]
+		\centering
+		\putfig{.48}{ex308s1_loc15_tfunc.png}\hfill
+		\putfig{.50}{ex308s1_loc15_poles.png}
+	\end{figure}
+\end{frame}
+
+\begin{frame}{Local convergence}{Visual example: $N=308$, Reduced model $n=15$}
+	\begin{figure}[htbp]
+		\centering
+		\putfig{.85}{ex308s1_loc15_poles.png}
+	\end{figure}
+\end{frame}
+
+\begin{frame}{Local convergence}{Visual example: $N=308$, Reduced model $n=15$}
+	\begin{figure}[htbp]
+		\centering
+		\putfig{.70}{ex308s1_loc15_tfunc.png}\hfill
+		\putfig{.30}{ex308s1_loc15_poles.png}
+	\end{figure}
+\end{frame}
+
+
+\section{Method}
+
+\subsection{Process}
+\begin{frame}{Krylov subspace}{}
+Recall that for matrices $\A(s_0)$,$R(s_0)$, the 
+reduced-order model transfer function $H_n(s)$:
+	\begin{itemize}
+		\item  has Taylor series expansion
+		\[
+			H_n(s)= \sum_{j=0}^{n-1} (s-s_0)^jM_j + \bigO{(s-s_0)^n},
+		\]	 
+  		where $M_j =  B^T\A^j R$
+
+		\bigskip
+		\item lives in the $n$-th block-Krylov subspace
+		\[
+			H_n(s) \in \krylov{n}{\A}{R}:= \text{span}\left\{R,\A R,\A^2R,\ldots,\A^{n-1}R\right\}
+		\]
+	\end{itemize}
+\end{frame}
+
+
+%%%%% not sure what to do with this
+\begin{comment}
+
+\begin{frame}{Power iterations converge to invariant subspace}
+ Example: For $v\in\R^N$ expressed in terms of eigenpairs $(\lambda_j, z_j)$
+ of $\A$, successive left multiplication by $\A$ yields:
+	\begin{align*}
+		   \A^k v &= \sum_{j=1}^N \alpha_j \A^k z_j\\
+		   &= \alpha_1 \mathlarger{\alert{\lambda_1^k}} z_1 + \mathsmaller{\alpha_2 \lambda_2^k z_2 + \cdots + \alpha_N \lambda_N^k z_N}
+		   %&= \sum_{j=1}^N \alpha_j \lambda_j^k z_j\\
+		   %&= \mathlarger{\frac{\alpha_1 z_1}{\alert{(\mu_1 - s_0)^k}}} + 
+		   %\mathsmaller{\frac{\alpha_2 z_2}{(\mu_2 - s_0)^k}+
+		   %\cdots+ \frac{\alpha_N z_N}{(\mu_N - s_0})^k}
+   	\end{align*}
+   	
+   	
+	   		%Eigenvalues $\lambda_j$ of $\A(s_0)$ and poles $\mu_j$ of transfer function
+	   		%$H(s)$ related by \[  \lambda_j = \frac{1}{\mu_j-s_0}. \]
+
+   	\begin{itemize}
+    	\item Assmuming $\lambda_1 > \lambda_j$ for $j>1$, \\ $v_n\rightarrow z_1$. 
+    	Naive process (power iterations) gets `stuck'.  
+    \end{itemize}
+\end{frame}
+
+
+\end{comment}
+
+%%%%%%%%%
+
+
+\begin{frame}{Arnoldi Process}{Generates basis for Krylov subspace}
+Arnoldi process computes orthogonal basis matrix 
+$V_n = \left[ v_1\, v_2\, ...\, v_n \right]$ for Krylov subspace $\krylov{n}{\A}{r}$:
+  
+  \medskip
+  \begin{itemize}
+	   \item $v_1 = r/\|r\|$
+	   \item $v_2 = \left(\A v_1\ \text{orthogonalized against}\  v_1\right)$
+	   \\ $\vdots$ 
+	   \item $v_n = \left(\A v_{n-1}\  \text{orthogonalized against}\  
+		      \{v_1,v_2,\ldots ,v_{n-1}\}\right)$
+   \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{Arnoldi Process}{Computationally expensive} 
+  The $n$-th iteration of Arnoldi 
+	\[   v_n = \left(\A v_{n-1}\ \text{orthogonalized against}\ 
+		      \{v_1,v_2,\ldots ,v_{n-1}\}\right)                     
+	\]
+   requires 
+   \begin{itemize}
+		\item  $1$ Matrix-vector product   	      
+        \item  $n-1$ inner products, $n-1$ SAXPYs ($\alpha x + y$)
+   \end{itemize}
+	
+	\bigskip
+	Computing $v_n\in\C^N$ grinds to a halt with increasing $n$\ !
+\end{frame}
+
+
+\begin{frame}{Thick-Restart}{}
+	After $m$ iterations of Arnoldi process,
+	\begin{itemize}
+		\item \emph{Restart} the process. 
+		\item Keep (nearly) invariant subspace $Y\subset V_m$.
+		\item Move $s_0$ to possibly better location.  Adaptive, automated.
+	\end{itemize}
+	
+	\bigskip
+	Current successful projection methods use \emph{static} $s_0$ placement located  
+	for good global convergence, and no restarts.	
+\end{frame}
+   
+
+
+\begin{frame}{Deflation}{Extract invariant subspace from $V_m$}
+After a run ($m$ iterations) of Arnoldi with $\A(s_0)$,$R(s_0)$,\\ 
+matrix $V_m$ is basis for $\krylov{m}{\A}{R}$. 
+	
+	\begin{description}
+		\item[Deflation:]  Obtain $Y \subset \text{span} V_m$ with property 
+		  \[\A Y \approx YS \] 
+	\end{description}
+	\begin{itemize}
+	\item $Y = \left[ y_1\, y_2\, ...\, y_\ell \right]$ is approximately
+	     $\A$-invariant to some tolerance parameter $\tau$.
+	\end{itemize}
+	\medskip
+	
+	\uncover<2->{%
+	For \emph{exactly} $\A(s_0)$-invariant $Y$:
+	\begin{itemize}
+		\item $Y$ is $\A$-invariant for \emph{any} $s_0$
+		\item $Y$ is eigenspace of $sE-A$ associated with `captured' poles.
+	\end{itemize}
+	}
+\end{frame}
+
+
+
+\begin{frame}{Selecting new $s_0$}
+	\begin{itemize}
+		  \item Dominant poles $\rpol_j$ of reduced model $H_m(s)$ approximate dominant 
+		  	poles of the full model.
+		  	\bigskip
+		  	
+		  \item We can use this info to select new expansion point $s_0^1$.
+	\end{itemize}
+	
+\end{frame}
+
+
+
+
+\begin{frame}{Thick-Restart Arnoldi with $s_0^1$}
+   The next run of Arnoldi uses $\A_1:=\A(s_0^1)$, $R_1:=R(s_0^1)$, and $Y$ to produce $V^1$.
+	\uncover<1-1>{%
+		\begin{itemize}
+			   \item Each iteration, orthogonalize new $\A v_j^1$ 
+			   against $\{v_1^1, v_2^1,...,v_j^1\}$ and  $\{y_1, y_2,...,y_\ell\}$.
+
+				\medskip
+			   \item Eliminates from the search poles $\mu_j$ of the full model 
+					already `discovered' on previous runs. 
+		\end{itemize}
+	}
+	\uncover<2->{%
+	Orthogonalization against known invariant subspace prevents 
+		     redundancy (linear dependence) between $V^1$ and $V^0$, so
+	\[
+		\widehat{V} = \mat{V^0 & V^1}
+	\]
+	has full rank.
+	}
+\end{frame}
+
+
+
+
+\begin{frame}{Result of method}{}
+$K$ runs of restarted Arnoldi yields
+	  \[ \widehat{V} := \mat{ V^0& V^1& \cdots & V^{K-1}} \]
+and 
+\[ Y^j := \text{deflate}\left(V^{j-1}\right) \quad\text{for } j=1,2,...,K-1. \]
+
+	\begin{itemize}
+		\item Each $V^j$ is orthogonal to $\left\{Y^1,Y^2,...,Y^j\right\}$.
+		\item $\widehat{V}$ is possibly rank-deficient.
+		\item $\text{colspan} V^j \alert{\neq} \krylov{m}{\A_j}{R_j}$ for $j>0$.
+	\end{itemize}
+\end{frame}
+
+
+
+
+\begin{frame}{Piecewise Krylov subspace}{Compounded moment matching}
+\begin{conjecture*}
+ \begin{enumerate}
+    \item
+		\[\bigcup_{j=1}^{K-1}\krylov{m}{\A_j}{R_j} \subset \text{colspan} \widehat{V}. \]
+	
+	\item If $\widehat{V}$ has full-rank, the reduced model of size $n=mK$ obtained 
+	by projection with $\widehat{V}$ matches \emph{at least} $m$ moments about
+	each $s_0^j$.
+  
+  \end{enumerate}
+	%has the property 
+	%  \[ 
+	%		H_n(s) =  H(s) + \bigO{\sum_{j=0}^K (s-s^j_0)^m}.
+	%  \]
+\end{conjecture*}
+%Size $n$ model matches \emph{at least} $m$ moments about each $s_0^j$.
+\end{frame}
+
+
+
+
+\subsection{Results}
+\begin{frame}{Preliminary results}{selecting good expansion points $s_0$}
+	\begin{itemize}
+	\item Current working algorithm uses $K$ pre-determined expansion points 
+			$s_0^j$ placed along imaginary-axis. 
+	\item Covers entire segment $S$ of interest.
+	\end{itemize}
+	
+	\begin{figure}[htbp]
+			\centering
+			Example: $1$ run of $m=15$, invariance tolerance $\tau=10^{-4}$\\
+			\putfig{.48}{ex308s1_ncvrgd15_1e4.png}\hfill
+			\putfig{.48}{ex308s1_wt_15_1e4.png}\\
+			\hfill\# converged poles vs. $s_0$\hfill {} \hfill wt vs. $s_0$\hfill {}
+	\end{figure}
+\end{frame} 
+
+
+
+\begin{frame}{Preliminary results}{Comparison of two reduced ($N=308$, $n=64$) models}
+	\begin{figure}[htbp]
+		\centering
+		\putfig{.48}{ex308s1_m16r4_1e6_tfunc.png}\hfill
+		\putfig{.50}{ex308s1_rmp64.png} \\
+		\hfill New ($m=16, K=4, \tau=10^{-6}$) \hfill Standard ($s_0=\pi 10^{10}\in\R$)\hfill
+	\caption{Standard reduced model requires size $125$ to match accuracy of size $64$ model 
+	using restarts.}
+	\end{figure}
+\end{frame}
+
+
+
+\begin{frame}{Preliminary results}{Weird effects of $\tau$}
+Selecting invariance tolerance parameter $\tau$ is not trivial!
+	\begin{figure}[htbp]
+	Same example model. $m=16, K=4$ reduced models
+		\centering
+		\putfig{.60}{ex308s1_m16r4_errVsTau.png}\\
+		Relative ($L^\infty$) error vs. $\tau$
+	\end{figure}
+\end{frame}
+
+
+
+
+\section*{Summary}
+
+\begin{frame}{Take-home message}
+  \begin{itemize}
+  \item
+     \alert{Thick-restart} Krylov methods are used in other applications,
+     but have not been applied to model reduction.
+  
+  \bigskip
+  \item Existing multi expansion-point ($s_0$) methods are inefficient.
+  
+  \bigskip
+  \item Potential \alert{adaptivity} of our method could result in robust algorithms.
+  \end{itemize}
+\end{frame}
+
+	
+\begin{frame}{Thank you}
+\begin{figure}
+		\centering
+		\putfig[{102 127}]{.20}{images.jpeg}
+	\end{figure}
+\end{frame}
+
+
+\begin{comment}  %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{}
+
+  You can create overlays\dots
+  \begin{itemize}
+  \item using the \texttt{pause} command:
+    \begin{itemize}
+    \item
+      First item.
+      \pause
+    \item    
+      Second item.
+    \end{itemize}
+  \item
+    using overlay specifications:
+    \begin{itemize}
+    \item<3->
+      First item.
+    \item<4->
+      Second item.
+    \end{itemize}
+  \item
+    using the general \texttt{uncover} command:
+    \begin{itemize}
+      \uncover<5->{\item
+        First item.}
+      \uncover<6->{\item
+        Second item.}
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+% The following outlook is optional.
+  \vskip0pt plus.5fill
+    \begin{itemize}
+    \item
+      Outlook
+      \begin{itemize}
+      \item
+        
+      \item
+        Something else you haven't solved.
+      \end{itemize}
+    \end{itemize}
+  \end{frame}
+
+\end{comment} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\nocite{eiermann_talk,grimme97,Jherm}
+%\bibliographystyle{plain} 
+%\bibliography{erensi_refs}
+
+\end{document}
+
+

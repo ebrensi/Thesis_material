@@ -1,0 +1,469 @@
+% !TeX root = doc.tex
+
+
+% Here are preliminaries for the problem formulation
+\section{Problem motivation}\label{sec:motivation}
+
+\subsection{VLSI circuit interconnect modeling}
+\index{interconnect}
+\yinitpar{C}ircuit interconnect is the network of ``wiring'' connecting components in an electronic circuit.      
+\begin{figure}[tb]
+\centering
+\subfloat[\label{fig:im1}]{\putfig{.3}{ts.png}}\hfill
+\subfloat[\label{fig:im2}]{\putfig{.6}{IC22RLC.png}}
+\caption{\subref{fig:im1} 3-level circuit interconnect  \cite{wiki:IC}.  \subref{fig:im2} is  from \cite{stan1}}
+\label{fig:im}
+\end{figure}
+It is passive (contains no voltage sources) but it is not transparent with respect to the behavior of the chip or larger circuit that contains it.   The interconnect ``wiring'' itself possesses  resistance, capacitance, and inductance (hence it is an RCL circuit itself) and thus forms an  non-negligible part of the larger circuit, via these \emph{parasitic elements}.  This is especially pertinent as chips shrink in physical size. With increasingly small and compact circuitry, the distorting effect of interconnect becomes more prominent.  In practice the entire circuit interconnect is not considered at once but rather in smaller sections, each of which is modeled as a RCL circuit, then represented as a node in a larger network.  If the frequency response of a section of interconnect is determined in the modeling stage, modeling an entire VLSI (very large scale integration) circuit using industry software such as SPICE becomes feasible.    \emph{Frequency response} of a network of interconnect is a mapping of input signals to output signals, i.e. how the wiring affects (distorts) signals running through it.    For a very large interconnect circuit,  short of actually fabricating a hypothetical circuit and physically testing it (an expensive and time consuming process), determining its frequency response is a difficult problem.  The interconnect is constructed first as a computer model and tested that way.  The model itself takes up a lot of memory and running it is computationally expensive and requires approximation by some sort of model reduction.   The model is approximated by a smaller (Reduced Order) model that behaves like the original, but over a limited set of input signals.  In some cases, a reduced order model suggests a simpler interconnect circuit, resulting in a reduction of the physical size of the interconnect when it is fabricated.     
+
+The frequency response of a circuit is the output it gives when excited with sine waves of varying frequency.   For an input waveform of a given frequency, an RCL (or any linear) circuit will output another waveform of the same frequency, only time-shifted and scaled in magnitude.    To know the frequency response of a circuit means to have a mapping of every input signal to the modified (distorted) output by that circuit.  We call such a mapping the \emph{system function} or \emph{network function}  for the circuit.   Mathematically, we can do this by analyzing a dynamical system model of the circuit behavior.  
+
+\clearpage
+\subsection{Descriptor system}\index{LTI system!descriptor system!state-space representation of}
+\yinitpar{T}he \emph{state-space representation} of an input-output system is a mathematical model that considers the input and the output as functions of time, related by a set of first order differential equations.  We will refer to the input, internal state, and output of the system as \emph{signals}.   The output signal for a given input signal is also called the system \emph{response}.
+At time $t\geq 0$, the model with internal state $x(t)$ accepts an input value $u(t)$, and outputs $y(t)$.     The range of the internal state $x(t)$ is the \emph{state-space} of the model.
+\[
+u(t) \longrightarrow \boxed{\text{system with internal state }x(t)} \longrightarrow y(t) 
+\] 
+If $u(t)$ is a scalar (e.g. $u(t)\in\R$), we call this a \emph{single-input (SI)} system, otherwise it is a \emph{multi-input (MI)} system.  Furthermore, a state-space system is specified as \emph{single-output (SO)} or  \emph{multiple-output (MO)}.   The most general configuration is the multi-input, multi-output (MIMO) model, but for simplicity we  usually refer to the single-input, single-output (SISO) if generalization to MIMO is straightforward.   A continuous generally nonlinear state-space system is defined by the differential equations 
+\begin{equation}
+\begin{aligned}
+\dot{x} &= f(x,u),  \qquad  x\in\R^n \\ 
+y &= g(x,u), \qquad u\in\R^\nin, \quad y\in\R^\nout. 
+\label{eq:NLSS}
+\end{aligned}
+\end{equation}
+The \emph{order} or \emph{state-space dimension} of the system is $n$ and input and output dimensions are $\nin$ and $\nout$, respectively.  \eqref{eq:NLSS} represents a SISO model if $\nin=\nout=1$.  
+
+Many systems, such as circuit interconnect, are better served with the more general \emph{descriptor} representation
+\begin{equation}
+\begin{aligned}
+ f(x,\dot{x},u) &= 0 \\
+y &= g(x,u)
+\label{eq:NLDS}
+\end{aligned}
+\end{equation}
+also known as a \emph{singular},  \emph{generalized}, \emph{semistate},  \emph{implicit}, or \emph{DAE (differential algebraic equation)} system.   Although \eqref{eq:NLDS} also models internal state and is thus a state-space system, the name \emph{state-space system} is typically reserved for \eqref{eq:NLSS}.    The descriptor system \eqref{eq:NLDS} differs from \eqref{eq:NLSS} in that the model is governed by a system of differential algebraic equations rather than ordinary differential equations.  For simplicity we will use the terms interchangeably, but we will always refer to the more general descriptor system.
+
+
+\subsubsection{Linear, time-invariant (LTI) system}\index{LTI system}
+We are particularly interested in state-space (descriptor) systems that are \emph{linear} and \emph{time-invariant}, because we can fully characterize a LTI system by its response to a single \emph{impulse} signal as input.      
+No electric circuit is exactly linear, but many can be reasonably approximated as such, and those consisting only of resistors, capacitors, and inductors (RCL/RLC circuits) are particularly suited to linearization. 
+Henceforth, we assume our models have the trivial initial state, $x(0)= 0$, which ensures that the mapping of our state-space model from input to output is unique.    
+
+Suppose we have a continuous state-space system
+$\LTI$ for which over some time interval, input signals $u_1(t)$ and $u_2(t)$ elicit responses $y_1(t)$ and $y_2(t)$ (e.g. $y_1(t)=\LTI[u_1(t)]$) such  that for any real scalars $\alpha_1 , \alpha_2$, 
+\[
+\LTI[\alpha_1 u_1(t) +\alpha_2 u_2(t)]   =  \alpha_1 y_1(t) +\alpha_2 y_2(t).
+\]
+
+Such a system $\LTI$ is called \emph{linear}.    The other defining property (\emph{time-invariance}) of a LTI system is that for input signal $u(t)$ and response $y(t)$,   
+\[
+\LTI[u(t-\tau)] = y(t-\tau),
+\]
+for $\tau\in\R$.
+
+Linearity and time-invariance are the properties necessary for a model to be completely defined by its response to an impulse signal.  This is because we can approximate any continuous-time input signal, and thus the system's response,  via  continuous linear combination of time-shifted impulse signals (see section \ref{sec:impulse_response}). 
+
+\subsubsection{Linear descriptor system}  
+A \emph{linear descriptor system} is a general form of LTI system, and is expressed by the \emph{differential algebraic equations} (DAEs) 
+ \begin{equation}
+\begin{aligned}
+E\dot{x} &= Ax +B u, \qquad x\in\R^n, u\in\R^\nin \\
+y &= Cx+Du , \qquad y\in\R^\nout,
+\end{aligned}
+\label{eq:LDS}
+\end{equation}
+with $A,E\in\R^{n\times n}$, $B\in\R^{n\times \nin}$, $C\in\R^{\nout\times n}$, and $D\in\R^{\nout\times \nin}$ are fixed.\footnote{If $E,A,B,C,D$ are non-constant functions of time, the system is \emph{linear time varying (LTV)}.}  $A$ is called the \emph{system matrix}.  The linear descriptor system is a generalization of the standard LTI that one might see in a typical linear systems theory text, differing in the inclusion of the \emph {descriptor matrix} $E$, which is singular in general.  In the standard definition of a LTI system,  $E=I$ (identity) and thus is a system of ordinary differential equations (ODEs), rather than DAEs.   
+\eqref{eq:LDS} is a system of DAEs solely because of the singular descriptor matrix $E$, which makes it significantly more difficult to  explicitly solve.  We will assume that the \emph{matrix pencil} $(A,E)$ is non-singular,  or \emph{regular}, meaning that there exist values $s$ for which the matrix $A-sE$ is non-singular.
+ 
+\clearpage
+\subsection{Impulse response (time domain)}\label{sec:impulse_response}
+\textinit{A} brief (and optional) introduction of the impulse response of a LTI system in the time domain is helpful to establish the meaning of the transfer function and why it is an equivalent formulation of the system \eqref{eq:LDS}.   
+
+\begin{figure}[ht]
+\centering
+\putfig{1}{impulse.pdf} 
+\caption{Step approximation to a continuous-time signal.  Taken from \cite{Hespanha09}, fig. 3.3}
+\label{fig:impulse}
+\end{figure}
+
+
+Take a linear SISO LTI (state-space or descriptor) system that accepts input signal $u(t)$ and outputs response signal $y(t)$, with $t\geq 0$.   We can represent $u(t)$ as the superposition  of unit-area pulse signals (step functions)  $\delta_\Delta(t)$ of width $\Delta$,
+\begin{equation}
+u_{\Delta}(t) = \sum_{k=0}^{\infty} \Delta u(k\Delta)\delta_\Delta(t-k\Delta),
+\end{equation}
+as illustrated in figure~\ref{fig:impulse}. 
+
+Let $h_\Delta(t)$ be the system's response to the pulse signal $\delta_\Delta(t)$.  For $\tau\geq 0$, time invariance implies that  $h_\Delta(t-\tau)$ is the response to $\delta_\Delta(t-\tau)$.   The response to the approximated input signal $u_{\Delta}(t)$ is then (by linearity)
+\begin{equation}
+y_{\Delta}(t) = \sum_{k=0}^{\infty} \Delta u(k\Delta)h_\Delta(t-k\Delta).
+\end{equation}
+
+In the limit as  $\Delta\rightarrow 0$,  the unit pulse function $\delta_\Delta(t)$ converges to Dirac's delta function $\delta(t)$ also known as the \emph{impulse  signal}, so that 
+\[  
+u_\Delta(t)\rightarrow \int_0^\infty u(\tau) \delta(t-\tau) d\tau = u(t).
+\]
+    It follows that our system's response
+\begin{align}
+y(t) &= \lim_{\Delta\rightarrow 0} y_\Delta(t) = 
+\lim_{\Delta\rightarrow 0}\sum_{k=0}^\infty \Delta u(k\Delta)h_\Delta(t-k\Delta) \nonumber\\
+&=\int_0^\infty u(\tau) h(t-\tau) d\tau,
+\end{align}
+where $h(t)\in\R$ is the \emph{impulse response} to the impulse $\delta(t)$.
+We see that in the time domain, the relationship between input and output signals of a linear, time invariant system is the convolution 
+\begin{equation}
+y(t)=u(t)*h(t).
+\label{eq:impulse_response}
+\end{equation}
+   In this way, a LTI system's response in the time domain is completely summarized by its impulse response $h(t)$, which is defined independently of the state-space of the model.
+In the general MIMO case, $h(t)\in\R^{\nout\times \nin}$ is a real $p \times m$ matrix.
+
+\clearpage
+\subsection{System analysis in frequency domain}\label{sec:freq_domain_analysis}
+\yinitpar{S}ince we are concerned with input and output signals, analysis in the frequency domain is more appropriate. We shall clarify what the frequency domain is and how it relates to linear systems theory.    A signal in ``the frequency domain'' refers to representation of the signal as a composition of waveforms of different frequencies, rather than a composition of amplitude  values occurring at different times.  There are multiple such frequency representations, as well as real and complex notions of frequency, which can cause confusion.   For example, a signal may have a Fourier representation, Laplace representation, and a phasor representation, which are all frequency domain representations, but different.    For this reason, it is the convention to refer to the name of the transform we use to convert signals between time and frequency domain, when the actual representation is important eg. Laplace or $s$-domain, or the phasor domain. 
+
+\subsubsection{Frequency response}\label{sec:frequency_response}
+\begin{figure}[ht]
+\centering
+\putfig{.8}{IO_sinusoids.png} 
+\caption{Input and output pure sinusoids from the simple RC circuit pictured in (b), which is essentially an LTI system.  Amplitude and phase of the input signal are affected by an LTI system but frequency is unaffected. Figure 10.1-1 from \cite{dorf2004introduction}}
+\label{fig:IO_sinusoids}
+\end{figure}
+
+
+One property of a linear system is that a \emph{purely sinusoidal}\footnote{without attack or decay transients} input  signal of a given frequency yields a purely sinusoidal response of equal frequency, but with modified phase and amplitude.   This is illustrated in figure~\ref{fig:IO_sinusoids}. The change in phase and amplitude versus frequency $f\geq0$ is known as the system's \emph{frequency response}, and it defines the system's steady-state behavior, which is the behavior that the system settles into after some transient behavior.   For example, the way we determine the frequency response of a passive  LTI system is to supply it with an impulse input, which is like a hard shove.  Immediately after getting ``shoved'', the system undergoes some transient response and, after some time, settles into its steady state-response that continues indefinitely.  Of course the timescale for this is problem dependent; it  could be milliseconds, or years.  Reduced-order modeling primarily seeks to reproduce the frequency response over some interval of the real frequency spectrum (e.g. $f\in[10^0,10^{10}]\subset\R$).  
+\begin{figure}[ht]
+\centering
+\putfig{.5}{400px-Sine_and_Cosine.png} 
+\caption{The standard pure sinusoids $\sin(t)$ and $\cos(t)=\sin(t+\pi/2)$ have amplitude $1$ and differ by a $\pi/2$ phase shift.}
+\label{fig:cos_sin}
+\end{figure}
+
+The time-domain representation of a pure sinusoid waveform signal is 
+\begin{equation}
+v(t) = A\sin(\omega t + \phi).
+\label{eq:pure_sinusoid}
+\end{equation}
+The quantity $\omega=2\pi f\in\R$ is  the \emph{angular frequency}  of the signal, where $f$ is the frequency in cycles/second (Hz).  Amplitude $A=\max_t |v(t)|$ is the magnitude of the signal, and phase angle $\phi\in[-\pi,\pi]$ is its offset from the standard sine function.  We can also express \eqref{eq:pure_sinusoid} as $\Im z(t)$
+where 
+\begin{align}
+z(t) &= Ae^{j(\omega t + \phi)}
+\label{eq:Ae_wt}\\
+&= A\left[\cos (\omega t+\phi) + j\sin(\omega t + \phi)\right].
+\label{eq:complex_sinusoid}
+\end{align}
+ Throughout Section~\ref{sec:motivation} we will use the electrical engineering notational convention that $j=\sqrt{-1}$, since $i$ typically denotes current. 
+At a given angular frequency $\omega$, a pure sinusoid signal \eqref{eq:pure_sinusoid} is identified with its amplitude $A$ and phase $\phi$, so we may represent it in the frequency domain as the complex number  $Ae^{j\phi}$,  also known as a \emph{phasor} with the notation $A\angle \phi$.  As such, the frequency domain representation of a pure sinusoid waveform is a single complex number.  Arithmetic with phasors is that for complex numbers.   
+
+Consider the mapping of an input sinusoid $u(t)=A_1\sin(\omega t+\phi_1)$  to response $y(t)$ by an LTI system $\LTI$.  The output must also be a sinusoid of the same frequency,  $y(t)=A_2\sin(\omega t+\phi_2)$.  The frequency domain (phasor) representations of $u(t)$ and $y(t)$ are $U=A_1e^{j\phi_1}$ and $Y=A_2e^{j\phi_2}$.  Then, in the frequency domain,
+\begin{equation}
+   Y	= \LTI [U] = H U,
+\label{eq:single_freq_response}
+\end{equation}
+where the complex ratio 
+\begin{equation}
+H = \frac{A_2}{A_1} e^{j(\phi_2 - \phi_1)}
+\label{eq:H_single}
+\end{equation}
+is a unit-less multiplier.  Its magnitude $|H|=|A_2/A_1|$ is called the \emph{gain} of the system at frequency $\omega\in\R$ and its angle $\arg(H)=\phi_2 - \phi_1 \in\R$ is the  \emph{phase delay} or \emph{phase shift} affected by the circuit at $\omega$.    If we define $H(\omega)$ to be the multiplier  \eqref{eq:H_single} at each frequency $\omega\in[\omega_0, \omega_1]$ (where $\omega_0$ and $\omega_1$ are dependent on the problem), this function is known as the \emph{network function} or \emph{system function}, and in fact describes the frequency response $H(\omega)$ for the system.  
+
+\subsubsection{Complex frequency (Laplace) domain}
+Frequency response of the LTI descriptor system gives the steady-state response when input signals are sinusoids, but for effective system analysis we need some notion of transient\footnote{\emph{transient} signals are those that decay exponentially with time.} response as well.  This is of particular importance when our reduced order models may be unstable, or exhibit similar steady state response but have non-negligible transients.    
+\begin{figure}[ht]
+\centering
+\subfloat[\label{s_plane}]{\putfig{.2}{S_plane.png}}\qquad
+\subfloat[\label{s_plane_regions}]{\putfig{.5}{S_plane_regions.png}}
+\caption{\subref{s_plane} The complex frequency, or $s$-plane. Image from \cite{numerixDSP}. \subref{s_plane_regions} shows the types of signals represented by each region of the $s$-plane. image from \cite{MITlec2004}.  Sustained sinusoidal waveforms exist on the $\Im$-axis.}
+\label{fig:complex_freqs}
+\end{figure}
+
+The Laplace or  $s$-domain, is a generalization of the Fourier domain in which the basis functions can have exponentially increasing or decreasing magnitude, also known as damped or generalized sinusoids.  This allows for representation of transients and unstable behavior.     
+
+For \emph{complex frequency} 
+\begin{equation}
+ s = \sigma + j \omega, \qquad \sigma, \omega\in \R,
+\label{eq:def_s}
+\end{equation}
+the time domain function
+\begin{align}
+z(t) &= e^{st}
+\label{eq:e_st}\\
+&= e^{\sigma t} (\cos \omega t + j\sin\omega t)
+\label{eq:gen_sinusoid}
+\end{align}
+describes a damped sinusoid in the complex plane, whose magnitude increases or decreases exponentially depending on the sign of $\sigma$. 
+In this way we identify every complex frequency $s\in\C$ from \eqref{eq:def_s} with the real sinusoid 
+\begin{equation}
+\Re \left[z(t) \right] = e^{\sigma t} \cos \omega t
+\label{eq:re_z}
+\end{equation}
+where $\Re(\cdot)$ denotes real-part of a complex quantity (and $\Im(\cdot)$ is imaginary-part).
+For system analysis, the complex frequency $s$ is a convenient way to keep transient and steady-state components of a signal together in one quantity.   Values of $\sigma$ and $\omega$ correspond to the transient and steady-state parts of the signal over time.   Typically $\sigma\leq0$, otherwise the signal is unbounded and has no steady-state to speak of.
+
+\subsubsection{Generalized sinusoid}
+A more general formulation of the complex sinusoid \eqref{eq:e_st}, in the time domain, is 
+\begin{align}
+z(t) &= Ae^{j\phi}e^{st}\label{eq:generalized_sinusoid}\\
+&= Ae^{\sigma t}e^{j(\omega t + \phi)}\nonumber\\
+&= Ae^{\sigma t} \left[\cos (\omega t +\phi) + j\sin(\omega t+\phi) \right],
+\end{align}
+where $A$ and $\phi$ are the \emph{steady-state amplitude} and \emph{phase}.   Note that for a given complex frequency $s$, \eqref{eq:generalized_sinusoid} is characterized by $A$ and $\phi$, so  we can again represent \eqref{eq:generalized_sinusoid} in the frequency domain as the phasor  $Ae^{j\phi}\in\C$.  Mapping input to response phasors in the $s$-domain is analogous to \eqref{eq:single_freq_response} and \eqref{eq:H_single}.
+\smallskip
+
+Consider the input sinusoid 
+\begin{equation}
+Ae^{\sigma t} \cos (\omega t + \phi) = \Re\left\{ Ae^{\sigma t}e^{j(\omega t + \phi)} \right\}.
+\label{eq:gen_input}
+\end{equation}
+ For simplicity we will consider the input $u(t)$ to be the full complex 
+exponential (not just real part)\footnote{By linearity of $\LTI$, the response to \eqref{eq:gen_input} is the real part of \eqref{eq:gen_output}.  i.e. $\LTI[\Re\left\{ u(t) \right\} ]  =\Re\left\{ \LTI[u(t)] \right\}$}
+\begin{align*}
+u(t)&=Ae^{\sigma t}e^{j(\omega t + \phi)}\\
+&= Ae^{j\phi}e^{st}\\
+& = U e^{st}
+\end{align*}
+for $s=\sigma+j\omega$.  The phasor $U = Ae^{j\phi}$ is the frequency domain representation of $u(t)$.  $\LTI$ can only output a signal of the same frequency, so the response phasor is 
+\begin{equation}
+Y = \LTI[U] = HU,
+\label{eq:eigensignal}
+\end{equation}
+where $H\in\C$ is a rational number . The response is an amplified or attenuated (by a factor of $|H|$) and phase-shifted (by $\arg(H)$) sinusoid of the same frequency.\footnote{Every damped sinusoid $u(t)=e^{st}$ associated with $s\in\C$ is an eigenfunction of LTI system $\LTI$, sometimes called an eigensignal.}  Then
+\begin{align}
+y(t) &= Ye^{st}\nonumber\\
+&= \tilde{A}e^{j\tilde{\phi}}e^{st} \label{eq:gen_output}.
+\end{align}
+
+Thus we see that for every complex frequency $s$ in the $s$-plane, the LTI system has 
+a scale-and-shift factor $H(s)\in\C$ that maps a sinusoid with frequency $s$, to the system's output associated with $s$, via   
+\begin{equation}
+	Y(s) = \LTI[U(s)] = H(s) U(s),
+	\label{eq:complex_freq_response}
+\end{equation}
+where $H(s)$ is called the \emph{transfer function}, \emph{network function}, or \emph{system function} of the LTI system $\LTI$.
+In the frequency domain, mapping an input signal to an output signal is simply a matter of multiplication by the transfer function $H(s)$. 
+
+  Recall that we want to know or approximate the system's frequency response.  We are interested in its response to all input sinusoids of unit amplitude and zero phase angle (i.e. signals of the form $u(t)=e^{\sigma t} \cos\omega t$, for all $\sigma\in\R$, all of which have the phasor representation $e^{j0}=1$).    We can express this in the frequency domain as the input signal $U(s)=1$.  Then by \eqref{eq:complex_freq_response}, the network function $H(j\omega)=H(2\pi j f)$ restricted to the $\Im$-axis is the frequency response of the system, and is the frequency domain analog to the impulse response \eqref{eq:impulse_response}.    
+
+\subsubsection{Composition of sinusoids}\label{sec:composition}
+Mapping (generalized) input sinusoids to outputs via phasor scaling is straightforward, and by linearity of the LTI system this extends  to a signal $u(t)$ composed of several,
+\begin{align}
+u(t) &= \sum_{i=1}^N A_i e^{j\phi_i}e^{s_i t}\nonumber\\
+	&= \sum_{i=1}^N U(s_i) e^{s_i t},
+\label{eq:phasor_compostion}
+\end{align}
+where $N$ can be finite or countably infinite.    Then,
+\begin{align*}
+y(t) &= \sum_{i=1}^N Y(s_i) e^{s_i t}\\
+&=  \sum_{i=1}^N H(s_i)U(s_i) e^{s_i t}. 
+\end{align*}
+
+ In the frequency domain we simply write
+\begin{equation*}
+Y(s_i) = \LTI[U(s_i)] = H(s_i)U(s_i).
+\end{equation*}
+
+
+For these finite or countably infinite compositions of sinusoids,  $U(s_i)$ and $Y(s_i)$ is a phasor for each value of $i$ (e.g. $U(s_i)=A_ie^{j\phi_i}$).   If we were to represent a signal  this way for the continuous frequency domain  $s\in\C$, the functions representing these signals would not be continuous in general.   For continuous frequency $s$-domain representations we use the Laplace transform.   
+  
+\subsubsection{Laplace transform}\label{sec:Laplace}\index{Laplace Transform}
+This discussion is limited to signals $u(t)$ for which $u(t)=0$ for $t<0$. 
+For a general signal $u(t)$ (defined for $t>0$) the Laplace transform,
+\begin{equation}
+U(s) = \Lapl[u(t)] = \int_{0}^\infty e^{-st} u(t) dt,
+\label{eq:def_LT}
+\end{equation}
+yields a continuous frequency domain representation of $u(t)$.  Much is written about the region of convergence (ROC) of the Laplace transform for a given signal but we will not discuss that.  \cite{dorf2004introduction} states that any physically possible signal has a Laplace transform.  The Laplace domain representation $U(s)$  can be thought of as \emph{phasor density}, rather than a collection of phasors as in the discrete case of Section~\ref{sec:composition}.  This phasor density contains the necessary magnitude and phase information of the previously defined phasor, but must be scaled by the differential $d\omega/2\pi$ in order to be analagous to  a phasor;  indeed, the continuous ``sum''   
+\begin{equation}
+u(t) = \int_{-\infty}^\infty U(\sigma + j\omega) \frac{d\omega}{2\pi}e^{(\sigma + \j\omega)t},
+\label{eq:inverse_Laplace}
+\end{equation}
+of infinitesimal phasors is comparable to \eqref{eq:phasor_compostion}.  
+
+The Laplace representation $U(s)$ of a signal is infinitely dense at frequencies $s$ associated with generalized sinusoids present in the signal, and these values of $s$ are known as \emph{poles}.     For example, the Laplace transforms 
+\begin{equation*}
+\Lapl[e^{\sigma t}\cos \omega t ] = \frac{s-\sigma}{(s-\sigma)^2+\omega^2}, \qquad 
+\Lapl[e^{\sigma t}\sin \omega t] =  \frac{w}{(s-\sigma)^2+\omega^2}
+\end{equation*}
+each have a pole at $s = \sigma+ j\omega$.   In general, for $\mu\in\C$,  
+\begin{equation*}
+\Lapl[e^{\mu t}] = \frac{1}{s-\mu}.
+\end{equation*}
+
+ A plot of a Laplace representation of a signal over the $s$-plane is shown in Figure~\ref{fig:gain_plots}. Poles of a function in the Laplace domain provide information about encoded frequency and are of great interest.   Note that LTI system mapping input to output signals in the frequency domain via multiplication by transfer function  \eqref{eq:complex_freq_response}  applies to the Laplace representation of a signal as with a phasor. 
+
+\subsubsection{Linear descriptor system in frequency domain}
+Consider a general system of the form \eqref{eq:NLDS}  in the  $s$-domain. 
+Input signal $U(s) = \Lapl[u(t)]$ and response $Y(s) = \Lapl[y(t)]$  are related to their counterparts in the time domain by the Laplace transform.     The Laplace transform of the convolution  \eqref{eq:impulse_response} is the product 
+\begin{equation}
+Y(s) = U(s)H(s).
+\label{eq:YUS_prod} 
+\end{equation}
+Note that $\Lapl[\delta(t)]=1$.  Given the impulse signal $u(t)=\delta(t)$ as input, \eqref{eq:YUS_prod} implies the output signal $Y(s)=H(s)$ in the frequency domain, indicating that $H(s)$ is in fact the system's impulse response in the frequency domain.  
+ The function $H(s)=\Lapl[h(t)]$ is known as the system \emph{transfer function} and, like the impulse response it characterizes the response of its LTI system to any input.   Applying the Laplace transform to the descriptor system \eqref{eq:LDS},
+ \begin{equation}
+\begin{aligned}
+E (sX(s)-x(0)) &= AX(s) +B U(s), \\
+Y(s) &= CX(s)+DU(s) ,
+\label{eq:Lapl_LDS}
+\end{aligned}
+\end{equation}
+which reduces the system to algebraic equations.  Recall that $x(0)=0$ (zero initial state).    It follows from \eqref{eq:Lapl_LDS} that 
+
+\begin{equation}
+Y(s) = \left[C(sE-A)^{-1}B + D\right]U(s),
+\end{equation}
+and thus the transfer function for the general linear descriptor system \eqref{eq:LDS} is 
+\begin{equation}
+H(s) = C(sE-A)^{-1}B + D \quad\in\C^{m\times p}.
+\label{eq:gen_tfunc}
+\end{equation}
+
+For a SISO system (or one of the $mp$ junctions of an MIMO system), the transfer function  indicates changes in amplitude and phase for a given frequncy component $s$ of the input signal.   $\| H(s) \|$  is the system's frequency response \emph{gain}  at $s$ and $\arg(H(s))$  is frequency response \emph{phase shift}.   
+
+\medskip
+The transfer function \eqref{eq:gen_tfunc} of a LTI system characterizes its input-output behavior and we identify a model  
+\eqref{eq:LDS} with its transfer function.  We will refer to them interchangeably.    When the transfer function is considered over $s=j\omega=2\pi i f$ for frequency $f$ over some range of interest, the function 
+\[
+H( i \omega)=\left.H(s)\right|_{s=i \omega} \qquad \text{for} \qquad \omega \in [\omega_0, \omega_1]
+\]
+  is known as the system frequency response.  
+
+\subsubsection{System Modes/Transfer function poles}\label{sec:tf_modes} 
+ There are numerous ways other than \eqref{eq:gen_tfunc} to express the transfer function, a few of which are useful for reduced order modeling (ROM).  
+The domain of the transfer function is $\C$, but typically we are interested in the 
+system's steady-state (after any transient components disappear) response to excitation by pure sinusoidal waveforms $s=j\omega = 2\pi j f$, with standard frequency $f$ (in Hz) over some interval (e.g. $f\in[10^0, 10^{10} ]$).  We will refer to this segment of the $\Im$-axis in the $s$-plane as the transfer function's \emph{region of interest}. Any approximation to \eqref{eq:LDS} must have a transfer function that approximates  $H(s)$ at least in this region.   Nevertheless,  behavior of the transfer function for $s$ outside of the test spectrum does influence that inside and needs to be considered, specifically the poles and zeros. 
+
+The transfer function of a SISO LTI system must be a \emph{proper} rational function of the form 
+\begin{equation}
+H(s) = \frac{N(s)}{D(s)} = K \frac{(s-z_1)(s-z_2)\cdots(s-z_\ell)}{(s-\mu_1)(s-\mu_2)\cdots(s-\mu_k)},  \quad K\in\C, \ell<k 
+\label{eq:pole_zero}
+\end{equation}
+ called proper because $\ell<k$.  In the general MIMO case, $N(s)\in\C^{m\times p}$ is a matrix-valued polynomial and $D(s)$ is still scalar and \eqref{eq:pole_zero} represents one of $\nin \nout$ components of the transfer function.  Values $\mu_i,z_i\in \C$ are known as poles and zeros, respectively.  Poles of the transfer function correspond to \emph{modes} of the LTI system.   Modes $e^{\mu_i t}$ are components of the time-domain solution 
+\[
+y(t) =\sum_{i=0}^k \bm{\alpha}_i e^{\mu_i t},
+\]
+from which it is evident why we cannot have poles $\mu_i$ with positive real part.
+Transfer function \emph{zeros} are relevant as well.  They can be considered poles of $1/\nrm{}{H(s)}$, so we limit our discussion to poles.  
+
+
+\begin{figure}[htb]
+\centering
+\putfig{.8}{pole_zero_bode.png} 
+\caption{Influence of poles on frequency response.  (a) is a pole-zero plot (with no zeros) and (b) is the corresponding pair of Bode plots.  Image from \cite{MITlec2004}.  Take the segment $[j\omega_1,j\omega_2]$ to be the region of interest. Poles  at $p_1$ and $p_2$ are indicated in (a) by `$\times$'. Note the gain ($|H(j\omega)|$) peak in (b) corresponding to $\omega = \Im\{p_1\}$, where distance from $p_1$ to the region of interest is minimized.  In this case $p_1$ is the dominant pole.}
+\label{fig:pole_influence}
+\end{figure}
+
+
+\begin{figure}
+\putfig{.7}{maritime_tents}
+\centering
+\caption{Poles of the transfer function are values of $s\in\C$ such that $\| H(s)\|=\infty$, appearing like poles holding up a tent in a plot of the transfer function gain $\| H(s)\|$ over the $s$-plane.  Source:\cite{tent_pic_source} }
+\label{fig:tent}
+\end{figure}
+  
+
+If we assume all the poles of $H(s)$ are unique\footnote{There is no loss of generality to assume that poles of $H(s)$ are unique, and considering computational imprecision, they are unique in general.}, we can express it as the  \emph{pole-residue} expansion 
+\begin{equation}
+          H(s) = X_\infty +
+          \sum_{\mu_i\neq\infty}\frac{X_i}{s-\mu_i}.
+	\label{eq:pole_residue_1}
+  \end{equation}
+The $X_j\in\C^{m\times p}$ (scalars for SISO model) are the residues, and $X_\infty$ is a constant term  that encompasses terms for poles at infinity.    For a given value of $s$, some terms in the sum will be larger than others.  A pole associated with a proportionally large term  in \eqref{eq:pole_residue_1} for some value of $s$ is called a \emph{dominant pole}.    A given pole $\mu$ will have its greatest influence on $H(j\omega)$ at the value of $j\omega$ in closest proximity, as shown in figure~\ref{fig:pole_influence}.    
+
+A possible measure of dominance of a finite pole $\mu$ with reside $X$ is its \emph{weight}
+\begin{equation}
+\text{wt}(\mu) = 
+\max_{s\in S} \frac{\|X_i\|}{|s-\mu_i|} =   \frac{\|X_i\|}{d(\mu,S)}
+\label{eq:pole_weight} 
+\end{equation}
+where distance from pole $\mu$ to the region $S=[j\omega_1, j\omega_2]$ (a segment on the $Im$-axis)  
+\begin{equation*}
+d(\mu,S)=
+\begin{cases}
+|\mu-j\omega_1|, & \quad \Im (\mu) >\omega_1\\	
+|\Re (\mu)|, & \quad  \Im (\mu) \in [\omega_0,\omega_1] \\ 
+|j\omega_0-\mu|, & \quad  \Im (\mu) <\omega_0
+\end{cases}
+\end{equation*}
+The weight for all infinite pole(s) is given by $\text{wt}(\infty) = \|X_\infty\|$.  The weight of a pole is the magnitude of its residue divided by its distance to the segment $S$ on the imaginary axis  corresponding to  the frequency range of interest. In computational practice, it may be difficult to distinguish  strictly infinite poles from ones that are just remote, but both infinite and remote poles have a similar global (or nearly global) influence on the transfer function over $S$.  We can consider the influence of a remote or infinite pole to be essentially constant, as it does not vary significantly over $S$.   
+The weight \eqref{eq:pole_weight} is a modification of the typically used MDI (Modal Dominance Index) 
+\begin{equation}
+\gamma(\mu_i) = \frac{\| X_i \|}{\Re (\mu_i )}
+\label{eq:MDI1} 
+\end{equation}
+defined by \cite{Aguirre}, in that they assume $\Re(\mu_i)<0$ for all $i$.     The circuit models we have tested tend to have several poles at zero, most of which have tiny residues.  A circuit model may have hundreds of poles at zero!  Poles with small residues very near the $\Im$-axis are common too.         
+
+If the poles and residues of a transfer function can be determined accurately and efficiently,  a truncated \eqref{eq:pole_residue_1} using only the most dominant poles as determined by \eqref{eq:pole_weight}  serves as an approximation to the transfer function.  
+ 
+The pole-residue formulation \eqref{eq:pole_residue_1} corresponds with the system's impulse response (defined in \eqref{eq:impulse_response})
+\begin{align}
+          h(t) = \Lapl^{-1}[H(s)] &=
+         X_\infty \delta(t) + \sum_{i=1\atop{\mu_i\neq\infty}}^q  X_i e^{\mu_i t}\\
+ &= \sum_{i=0}^q  X_i e^{\mu_i t}, \qquad t>0 \nonumber
+\label{eq:impulse_response_pole_exp}
+\end{align}
+in the time domain, given that the system has $q$ finite poles.  
+
+Observe that $\lim_{t\rightarrow \infty}|h(t)|=0$  if and only if $\Re{(\mu_j)} <0$ for all $j$, i.e. $H(s)$ has no poles in the right half $s$-plane.  In that case we say the LTI system is  \emph{bounded-input bounded-output (BIBO) stable}, or more simply, \emph{stable}.   If $H(s)$ has a pole located exactly on the $j\omega$ axis (and none in the posititve $s$-plane), we call this \emph{marginal}  BIBO stability.
+
+
+\begin{figure}[ht]
+\centering
+\subfloat[\label{fig:gain_a}]{\putfig{.70}{examp_tfuncs_1.png} }
+
+\subfloat[\label{fig:gain_b}Bode gain plot ($\sigma=0$)]{\putfig{.48}{examp_tfuncs_3.png} }\hfill
+\subfloat[\label{fig:gain_c}]{\putfig{.50}{examp_tfuncs_5.png} } 
+\caption{Gain ($|H(s)|$) plots for example transfer function \eqref{eq:example_tfunc1}.  The peaks in \subref{fig:gain_a} have infinite magnitude but are capped at finite values.   \subref{fig:gain_b} is the the typical Bode gain plot, also known as frequency response gain, and gives the  standard  system frequency response for undamped periodic inputs ($\sigma=0$).  the contour plot  \subref{fig:gain_c}  illustrates not only the location of finite poles but their influence on the frequency response \subref{fig:gain_b} determined by magnitude of residue and proximity to the $j \omega$-axis.}        
+\label{fig:gain_plots}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\subfloat[\label{fig:gain2_a}]{\putfig{.70}{examp_tfuncs_6.png} }
+
+\subfloat[\label{fig:gain2_b}Bode gain plot, $\omega>0, \sigma=0$]{\putfig{.70}{examp_tfuncs_7.png} } 
+\caption{Gain ($|H(s)|$) plots for example transfer function \eqref{eq:example_tfunc1}. These are the same as in figure~\ref{fig:gain_plots} except that we only consider $\sigma \leq 0$ and $\omega\geq0$.
+\subref{fig:gain2_b} is how we will present most gain plots.}
+\label{fig:gain_plots_cropped}
+\end{figure}
+
+
+\begin{figure}[ht]
+\centering
+\subfloat[\label{fig:phase_a}]{\putfig{.60}{examp_tfuncs_2.png} }\hfill
+\subfloat[\label{fig:phase_b}Bode phase plot ($\sigma=0$)]{\putfig{.60}{examp_tfuncs_4.png} }
+\caption{Phase plots for example transfer function \eqref{eq:example_tfunc1}.  The phase shift properties $\arg(H(s))$ of the LTI system characterized by $H(s)$ shown for \subref{fig:phase_a} all $s\in\C$ and  \subref{fig:phase_b} over undamped sinusoids of varying frequency.   \subref{fig:phase_b} is called the Bode phase plot.  We mostly ignore phase information in this document but engineering texts often include a phase plot as well as a gain plot (figure~\ref{fig:gain_b}) to illustrate frequency response of a LTI system. } 
+\label{fig:phase_plots}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\subfloat[\label{fig:3d3}$x=1$]{\putfig{.47}{3dpoles_3.png} }
+\subfloat[\label{fig:3d2}$x=20$]{\putfig{.50}{3dpoles_2.png} } 
+
+\subfloat[\label{fig:3d3}]{\putfig{.48}{3dpoles_3c.png} }
+\subfloat[\label{fig:3d2}]{\putfig{.48}{3dpoles_2c.png} }
+
+\subfloat[\label{fig:3d3}]{\putfig{.55}{3dpoles_4.png} }  
+\caption{Here we show  frequency response gain for the transfer modified with the addition of one pole at $-5+3j$, but with two different residues.  The additional pole has a larger residue and thus larger  influence in \subref{fig:3d3}.  The value of $x$ is the residue associated with the  extra pole.}
+\label{fig:extra_pole_examples}
+\end{figure}
+
+
+\subsubsection{Pole-residue example}
+The plots in Figures~\ref{fig:gain_plots} and \ref{fig:phase_plots} illustrate an example SISO transfer function
+\begin{equation}
+H(s)=1 + \frac{1}{s-\mu}+\frac{1}{s-\conj{\mu}}+\frac{3}{s+1}, \quad \mu = -\frac{1}{5}+2j
+\label{eq:example_tfunc1}
+\end{equation}
+for a hypothetical LTI system  with poles at $\infty$, $-1$, and $\mu=-1/5 \pm 2j$.   Figures \ref{fig:gain_b} and  \ref{fig:phase_b} are called the \emph{Bode} gain and phase plots, and serve as a visual characterization of the  LTI system steady-state frequency response.  In practice, both plots are often given over frequency $f$ in some range, where angular frequency $\omega = 2\pi f$.   Phase $\arg(H(j \omega)$ is given in radians or degrees, and gain $\| H(j \omega) \|$ is usually plotted on a logarithmic scale.  The frequency response of a LTI system over some frequency range can be expressed via a pair of Bode plots of $H(s)$: the gain, or magnitude plot is $\|H(2\pi j f)\|$ vs $f$.  The bode phase plot is of $\arg(H(2\pi j f))$ vs. $f$.  Typically in reduced order modeling publications, including this one, we supply the gain plot for a visual representation of the frequency response of a system, and we ignore the phase plot.     
+
+ Figure~\ref{fig:extra_pole_examples} illustrates frequency response changes if $H(s)$ has an additional pole at $\mu_2=-5+3j$, with residue $x\in\R$. 
+\begin{equation}
+H(s)=1 + \frac{1}{s-\mu_1}+\frac{1}{s-\conj{\mu_1}}+\frac{3}{s+1}+\frac{x}{s -\mu_2}, \quad \mu_1 = -\frac{1}{5}+2j, \mu_2 = -5+3j
+\label{eq:example_tfunc2}
+\end{equation}
+for two values of $x$.   In the example with the smaller residue $x=1$, the additional pole does not affect the frequency response gain $|H(j\omega)|$ as much as with a larger residual.   Comparative plots of frequency response gain are given in figure~\ref{fig:3d3}.
+Note that poles located farther from the region of interest  (here $j\omega$ for $\omega\geq 0$)  have more global influence and those closer cause sharper peak gain  features.  In the extreme case, a pole infinitely distant from the origin has a global (base response) effect as a constant term in the pole-residue expansion 	\eqref{eq:pole_residue_1}.  
+\clearpage

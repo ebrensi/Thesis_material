@@ -1,0 +1,48 @@
+\documentclass[letterpaper,notitlepage]{report}
+\usepackage{fullpage}
+
+\input{doc_macros.tex}
+\input{doc_macros2.tex}
+
+\newcommand{\putfig}[3][{}]{\includegraphics[width=#2\textwidth,keepaspectratio]{figs/#3}}
+\renewcommand\bibname{References}
+ 
+\setcounter{tocdepth}{4}
+%\setcounter{secnumdepth}{3}
+\newcommand{\mytitle}{A Thick-Restarted Krylov Subspace Method \\ for \\ Model Order Reduction}
+\numberwithin{equation}{chapter}
+
+\makeindex
+\begin{document}
+ \author{Efrem Rensi}
+\title{\mytitle}
+\date{Last update: \ \currenttime, \today}
+
+\maketitle
+%\input{Dissertation/TitlePage}
+\thispagestyle{empty}
+
+\tableofcontents
+\clearpage
+
+\linespread{1.5}   % this is line spacing
+
+\input{abstract.tex}
+\clearpage
+
+%\section*{Acknowledgments}
+%\input{thanks.tex}
+
+
+
+%\chapter{Problem Motivation} 
+%\input{motivation.tex} 
+
+%\chapter{Mathematical Model Order Reduction}
+\input{MOR_background.tex}
+
+\input{references.tex}
+
+\printindex
+
+\end{document}

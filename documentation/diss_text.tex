@@ -1,0 +1,2748 @@
+% !TeX root = diss.tex
+
+\chapter{Introduction}\label{sec:intro}
+\subsection{What is model order reduction?}
+Model order-reduction (MOR), also known as model-reduction, is the process by which a mathematical-model  characterized by some number of parameters $N$, referred to here as the unreduced model (URM), is approximated by a so-called reduced-order model (ROM) of size $n<N$.  
+
+
+Model reduction can be likened to digital-media compression.  We rarely work with images, video, or audio files or streams at their original resolution;  that usually requires more computing power, memory, or bandwidth than we have available.    Instead, we use lower resolution approximations that are ``good enough'' for our purposes.  We compress the data.  Significant data compression is generally lossy, meaning the reduced data contains less information than the original in some sense, which is observed as a reduction in quality.   Even as available memory and computation power increase, we continue to have problems that require more power or memory than we have available.   
+
+\smallskip
+In general,  model reduction can be applied to a model of any working thing whose behavior over time can be observed and influenced (i.e. has output and input).   We seek a simpler description of that thing while preserving its behavior in response to various inputs.  Order-reduction of the specific type of model that we will address has its origins in systems and control theory, where it has been applied to automate processes.   If the model correctly predicts a system's response to given input, we can use the model to determine how to efficiently control or influence the system.  An early example of modern model reduction is \cite{modaltrunc} from 1966.  Davison introduced the MOR method now known as modal truncation,               
+\begin{quotation}\singlespacing \itshape
+Often it is possible to represent physical systems by a number
+of simultaneous linear differential equations with constant coefficients,
+$\dot{x}=Ax+r$ but for many processes (e.g., chemical plants, nuclear reactors), the
+order of the matrix $A$ may be quite large, say $50\times50$, $100\times100$, or even $500\times500$. It is difficult to work with these large matrices and a means
+of approximating the system matrix by one of lower order
+is needed. A method is proposed for reducing such matrices by constructing a matrix of lower order which has the same dominant eigenvalues and
+eigenvectors as the original system.
+\end{quotation}
+
+The ``large'' systems we work with today are much larger.  At the time of this writing, Krylov-subspace methods are being used for systems on the order of $N=10^9$.   Krylov-subspace methods are particularly suited for working with systems that are too large for other methods, many of which are quite elegant.  A more in-depth survey of model order reduction methods can be found in \cite{Rommes2008}. The reason why Krylov methods are suited for such large systems is that the only large matrix operation required is a matrix multiplication, typically using a sparse matrix (more correctly a sparse solve of an order $N$ system).    The major computational expense is simply, repeatedly multiplying a large sparse matrix with a vector or block of vectors. 
+    
+
+\subsection{Some background} 
+Krylov projection methods for working with large matrices have been around for a while, and are even claimed to be in the top 10 most important  classes of algorithms of the 20th century \cite{top10alg}.  
+The first Krylov-subspace projection method for model order-reduction was PVL (\pade via Lanczos)  \cite{PVL} developed by Feldman and Freund in 1995.  Prior to that, Krylov methods were very successful in
+\begin{itemize}
+\singlespacing
+\item approximating eigenvalues of large matrices,\cite{lanczos,arnoldi} circa early 1950s,  
+\item approximating the solution $Ax=b$ to  large sparse systems 
+(\cite{saad1981krylov} offers a great background),
+\item approximating matrix function multiplications $f(A)b$ (like $e^A b$) when $A$ is very large \cite{krylov_matfun_eval}.   
+\end{itemize}
+
+It is not a surprise then that the most successful methods for model  reduction (MOR) of a very large, sparse, descriptor system model are iterative methods, and Krylov methods in particular.     
+
+\subsubsection{Relation to the eigenvalue problem}
+Krylov-subspace methods for model order-reduction have been developed out of methods for finding eigenvalues of very large, sparse matrices.   The problem of finding certain eigenvalues of a large matrix and that of finding an approximate solution of a large dynamical system model are closely related.   This is because the system can be represented as a linear operator whose action is expressed as operations (multiplication and back-solve) with large sparse matrices.    Constructing a good reduced-order approximation in that respect is equivalent to constructing smaller approximate system matrices that retain ``essential'' eigen-information of the original system, which is usually not known beforehand.  We wish to construct approximations that retain only enough essential information to be ``pretty good'', where that depends on the particular application of the model.    A Krylov method iteratively searches the solution space of the model via the eigen-space of its system matrices.
+
+
+An issue that is particular to model order-reduction, and not to eigen-analysis in general, is that the start vector for the search is pre-defined.  That is because iterations of the Krylov process are identified with terms of a Taylor series approximation to the model's system function about some interpolation-point(s) $\sigma$.   This is known as moment matching (about $\sigma$) and is important for determining exactly where the reduced order approximation is accurate, and to what degree.  As such, the moment matching property of a  Krylov subspace method only ensures local approximation.  MOR methods that guarantee global error-bounds, such as balanced-truncation \cite{moore1981principal} do exist but are more expensive. 
+
+
+\subsubsection{Restarted Krylov-subspace methods}
+A major issue is the computational cost of current methods.   Unmodified Krylov processes become more expensive as they progress incrementally, as each new basis vector must be made orthogonal to every previous vector.   A few restart schemes have been tried and implemented successfully for the eigenvalue problem and other applications of Krylov processes, some of which involve re-starting the search with a new start vector that better approximates the desired eigenvector(s).
+
+
+The thick-restart was introduced by Wu  in \cite{dynamicthick}  and \cite{wu1999thick} as an alternative to Lehoucq and Sorensen's implicit restart applied to Krylov methods for finding eigenvalues of very large matrices or matrix-pencils.  The reason for a restart in an eigenvalue method is to deal with storage limitations on the number of basis vectors we can hold, and/or computation cost of orthogonalizing each iterate against $n$ previous vectors on the $n$-th step.   Suppose our memory limits us to storing $n$ vectors, or $\bigO{nN}$ is the longest we can wait to orthogonalize a new basis vector.   Then we must stop the process and throw out some vectors every time we fill $n$ positions.  More precisely, we transform the vector basis $V$ into another basis $\mat{Y & Y^\perp}$ such that we can throw out $Y^\perp$ in the so-called deflation phase, and then continue, (re-starting) with $Y$, until we fill up $n$ positions again.   The subspace $Y^\perp$ that we throw out typically corresponds to unconverged eigen-information, or perhaps we keep certain nearly-converged approximate eigen-information in $Y$ that will separate the remaining space and make certain unconverged eigenvalues converge faster.   We continue to refine our set of $n$ vectors, cycle after restarted cycle, until we have the set of $n$ vectors we want.  
+
+\subsubsection{Restart in MOR}
+Restarted methods for eigenvalue finding refine one limited collection of vectors until they converge into a desired set. 
+The restart for model reduction serves a different purpose, although there are methods \cite{jaimoukha1997implicitMOR} and notable \cite{grimme1996restart} that construct a ROM using such a process of refining a projection subspace.  The idea has usually been to throw out bad poles of an implicitly projected ROM, refining the projection subspace until there are no poles with positive $\Re$-part or some other undesirable trait.   The problem with this is that matching moments of a model transfer-function about an interpolation point $\xp\in\C$ via projection on to a subspace $V$ requires that the desired Krylov subspace is contained in $V$.  If we throw out basis vectors then we have no guarantee of moments matched about $\xp$. 
+ 
+Our thick-restarted method proposed in \S\ref{sec:IRA_bArnoldi} does not throw out any basis vectors so moment matching about an interpolation point is preserved.  The thick-restart in this case allows us to change the interpolation-point after a cycle and avoid re-discovering sufficiently converged invariant subspace on the next cycle.
+
+
+\section{Motivation from the literature}
+In lieu of a full literature review, we quote S. Gugercin  from the 2005 paper \cite{gugercin2005iterative}, with references.
+\begin{quote}
+\singlespacing
+ \textbf{Krylov-based model reduction in the MIMO case:} Even though [a theorem about multi-point moment matching] explains how to solve the
+rational interpolation problem theoretically for the MIMO case as well as the SISO case, implementation of the
+underlying Krylov-based method becomes a much harder task for MIMO systems. The main difficulties are the
+needs for a block rational Krylov method and an effective deflation strategy. As for the single interpolation point
+case, a MIMO version of the Arnoldi procedure with deflation has been introduced by Boley in \cite{boley1994krylov}. On the
+other hand, the problem for the MIMO Lanczos procedure has not been completely solved until very recently. For
+the non-symmetric case, many authors have provided only block versions of the algorithm without the deflation
+procedure; see for example \cite{bai1999able,kim1988structural,o1980block}. However these block-wise approaches only tackled the problems with the
+same number of inputs and outputs. This obstacle has been overcome in \cite{ruhe1979bLanczos,nikishin1995variable,cullum1974block} only for the symmetric case.
+\emph{For the most general problem, namely the nonsymmetric case with arbitrary number of inputs and outputs, a
+solution has been recently presented by Freund et al.\ in \cite{AliagaMIMO} via a vector-wise construction of the underlying
+Krylov subspace with deflation. As for the MIMO systems and multiple interpolation points, the author is not
+aware of an effective implementation to address the MIMO (block) rational Krylov reduction except the special
+case of tangential interpolation by Gallivan et al.\ \cite{gallivan2004model}}.
+\end{quote}
+
+In this thesis we provide the method that the emphasized passage\footnote{our emphasis} seems to imply.  Our method extends the band-Krylov procedure \cite{AliagaMIMO} to address rational-interpolation, and introduces thick-restarts as part of the process.    As far as we know, there is only one other published implementation of a restarted band-Arnoldi process, the ``Restarted Block Arnoldi Method
+in a Vector-Wise Fashion'' \cite{band_IRA} by Yin and Lu, and their method is proposed for the eigenvalue problem.   Our method is a similar extension of the band-Arnoldi process, but with model order-reduction in mind.   
+
+We note that our implementation is of an \emph{explicit}-restart, although an implicit-restart could be implemented as well.   The implicit-restart is mathematically equivalent, but more efficient.   Since we were primarily interested in exploring the efficacy of a restarted band-Krylov method for model reduction, we decided to leave implementation of an implicit-restart to further research. 
+
+\section{Content overview}
+We  address the question of whether augmenting a Band-Krylov process with Ritz-vectors can be usefully implemented  in the development of more efficient Krylov-subspace projection methods for model order-reduction. Chapters \ref{ch:tfunc} and \ref{ch:krylov_MOR_background} introduce the basic concepts for a theory of model order-reduction via Krylov-subspace projection.     
+
+ Chapters~\ref{ch:newstuff1}  and \ref{ch:newstuff2} use the analytical framework outlined in prior chapters to argue the potential usefulness of thick-restarting the  band-Krylov algorithm for more efficient model-reduction methods.
+
+\subsubsection{Chapter \ref{ch:tfunc}}
+Chapter \ref{ch:tfunc} introduces the matrix-valued system transfer-function
+\begin{equation}
+\tf:\C \rightarrow \C^{\nin \times \nout}
+\label{eq:gen_tfunc}
+\end{equation}
+that characterizes the input-output relationship of a system with $\nin$ inputs and $\nout$ outputs.  An example of such a model is a signal processor, which takes an input signal and outputs a modified response signal.   For a given fundamental-signal $s\in\C$,  the $i,j$-th component of $\tf(s)$  gives the system's response from output-terminal $j$ when $s$ is input into input-terminal $i$.  We would like to create a ROM such that its transfer-function $\tfimp$ approximates the URM transfer-function $\tf$, so in some sense the problem of model reduction is that of approximating the function  \eqref{eq:gen_tfunc} over a given subset of $\C$.
+
+The transfer function can be represented and approximated by a quotient of two polynomials, or as a Taylor-series, and either representation is taken with respect to an expansion-point, also referred to as an interpolation-point.     Approximating \eqref{eq:gen_tfunc} with some number of Taylor series terms is known as moment-matching. 
+
+The transfer function can also be represented as a rational function, which for $\nin=\nout=1$ is the quotient  
+\[
+\tf(s) = \frac{P(s)}{Q(s)}
+\]
+ of two polynomials, where zeros of $Q(s)$ are known as poles of the transfer-function.  One way to approximate \eqref{eq:gen_tfunc} is via its poles and zeros; poles are of particular interest in model reduction.   Some poles have more influence on the quality of approximation  than others, and we introduce a measure of this influence called pole-weight.    
+
+\subsubsection{Chapter \ref{ch:krylov_MOR_background}}
+In chapter \ref{ch:krylov_MOR_background} we begin a discussion of Krylov subspace based model-reduction methods.  We introduce the Krylov subspace, and the Arnoldi algorithm, which is the most basic Krylov process used for subspace-projection based MOR.    The Arnoldi algorithm was originally used to find eigenvalues/vectors of large matrices and  we address how that application is related to model-reduction.   
+
+We define two different ROM transfer-functions that can be constructed with a given Krylov-subspace basis:  the ROM via \emph{implicit-projection} (or implicitly-projected), and that via \emph{explicit-projection}.     The former is cheaper to construct but is not desirable for use in applications because it can have ``bad'' poles.  It is useful for analysis of the converging approximate model while we are constructing it.  The explicit-projection ROM is the end-product of our method.   It is not constructed until the process is done.  
+
+\subsubsection{Chapter~\ref{ch:newstuff1}}
+Chapter~\ref{ch:newstuff1} addresses some of the issues that arise with use of multiple interpolation-points in $\C$ as opposed to one point in $\R$.   A single real expansion-point is often chosen to avoid the computational cost of complex arithmetic. We provide a translation of a Ritz-space associated with one interpolation-point to another in \S\ref{sec:subspace _translation}, which may be novel.  
+
+    In \S\ref{sec:eqreal} we introduce a possible improvement for the orthogonalization step of a Krylov-process that reduces orthogonalization  costs by half, and is fairly simple to implement.   As far as we know this is a novel contribution to the field.
+
+
+
+\subsubsection{Chapter~\ref{ch:newstuff2}}
+Chapter~\ref{ch:newstuff2} introduces the Band-Arnoldi algorithm, a generalization of the Arnoldi algorithm that allows for iterating simultaneously with several candidate vectors while remaining essentially a single-vector iterative process.   The vector-wise iteration of a band process sacrifices the ability to take advantage of efficient matrix-matrix multiplication algorithms, which is why block-wise methods like \cite{lehoucq1997block} currently prevail for MIMO model reduction.   These methods iterate an entire block of vectors on each step, but we feel that the band-process with vector-wise iteration allows for a simpler and more intuitive restart-scheme.   Restarting a Krylov process is done generally to reduce computational costs of orthogonalizing each iterate vector against every previous one, and we can take advantage of this to restart at a different interpolation-point.   The ``thick''  modifier indicates that on each cycle we re-use some of the information from the previous cycle, but not all of it as with full-orthogonalization.     
+
+Exploration of thick-restarting the Band-Arnoldi process was the original purpose of our research that led to this document, and is the thesis of our work.      We show how thick-restarting the Band-Arnoldi process can be incorporated into a model-reduction method.  It is debatable whether the method presents an improvement over existing methods in general, but we do show via tests with a few publicly available test models that that a comparable or better degree of reduction can be achieved with multiple complex points than with a single real interpolation point; also, with minimal drawbacks,  thick-restarting improves efficiency of basis-construction over a multiple-point method using full-orthogonalization.   
+
+
+
+
+
+
+\chapter{The model and its transfer-function}\label{ch:tfunc}
+\section{The LTI-system model}
+         Our basic problem is to approximate the ($N$-dimensional) \index{LTI system!descriptor system} linear, time-invariant (LTI) descriptor-system
+         \begin{equation}
+         \begin{aligned}
+                \E\frac{dx}{dt} &=  \A x + \BB u\\
+                y &= \CC^T x
+        \end{aligned}
+        \label{eq:ds1}
+        \end{equation}      
+with a system that is realized by smaller matrices $\A_n$, $\E_n$, $\BB_n$, and $\CC_n$.  
+The collection of constant matrices $(\A,\E,\BB,\CC)$ is called a
+realization \index{realization $(\A,\E,\BB,\CC)$ of the model} of the model, which we sometimes call the unreduced model (URM).
+
+ Matrices $\E$ and $\A$ are singular in general.   We only  assume that $\A-s\E$ is invertible for all $s\in\C$, except for a finite set of so-called eigenvalues.  
+
+\smallskip
+ $\BB\in\R^{N\times \nin}$  and  $\CC\in \R^{N\times \nout}$ are matrices that condition the input signal $u(t)\in\R^\nin$ and output signal $y(t)\in\R^{\nout}$.  
+ If $\nout=\nin = 1$ then \eqref{eq:ds1} is a single-input, single-output (SISO) system; its response (output) is a scalar-valued function.  If the dimension of $\BB$ and $\CC$ are both greater than one then \eqref{eq:ds1} is a multi-input, multi-output (MIMO) system. 
+
+\smallskip
+ We assume that the order-$N$ system \eqref{eq:ds1} is too large to work with and and we want a model that behaves like \eqref{eq:ds1}, but with significantly reduced state-space dimension $n$.  
+
+Suppose that, for some reason, we believe restricting the state space of the model \eqref{eq:ds1} to an $n$-dimensional subspace  $\K$, will yield a good reduced-order model.  If $V$ is an orthogonal basis of $\K$ then the \index{reduced-order model (ROM)} reduced-order model (ROM) obtained via orthogonal projection onto $\K$ is a new descriptor system
+         \begin{equation}
+         \begin{aligned}
+                \E_n\frac{d\tilde{x}}{dt} &= \A_n \tilde{x} + \BB_n u\\
+                \tilde{y} &= \CC_n^T \tilde{x},
+        \end{aligned}
+        \label{eq:ds1_expROM}
+        \end{equation}
+with orthogonal projections
+\begin{equation}
+	\A_n = V^T \A V, \quad \E_n = V^T \E V, \quad \CC_n = V^T \CC, \quad \BB_n = V^T \BB,
+       \label{eq:exp_projections}
+\end{equation}
+where $\tilde{x}(t)\in\C^n$ is the state of the reduced-order system such that $V\tilde{x}(t)$ approximates the state of the unreduced model.  The $\nout$ output(s) $\tilde{y}(t)\in\R^\nout$ approximate $y(t)\in\R^\nout$ from \eqref{eq:ds1}, given the same $\nin$ input(s) $u(t)\in\R^\nin$, and ideally $\nrm{}{y-\tilde{y}}$ is small.   
+\bigskip
+
+The reduced-order model \eqref{eq:ds1_expROM}, \eqref{eq:exp_projections} is called the  \emph{explicitly-projected} ROM, because in the computational setting we must actually compute \eqref{eq:exp_projections}.   Ultimately the desired ROM is in this form.
+  
+        \section{System transfer-function}\label{sec:tfunc_formulations}
+       The  transfer-function \index{transfer-function} is a direct 
+        relationship between input and output of the model in the frequency domain.  If we temporarily ignore the state of the model and view it simply as a mapping of an input signal $u$, to an output signal $y$, the system \eqref{eq:ds1} acts as a system-function $y=h(u)$.  The transfer-function is obtained by applying the Laplace transform (eg. $X(s)=\Lapl\{x(t)\}$) to  
+        \eqref{eq:ds1} and assuming a zero initial condition $X(0)=0$, which 
+        yields the algebraic equations 
+         \begin{equation*}
+                         \begin{aligned}
+                                s\E X &=  \A X + \BB U,\\
+                                Y &= \CC^TX.
+                        \end{aligned}
+        \end{equation*}
+
+        Then $Y(s)=\tf(s) U(s)$, where 
+        \begin{equation}
+                \tf(s) = \CC^T\left(s\E-\A\right)^{-1}\BB 
+                \label{eq:tfunc}
+        \end{equation}
+        is the transfer-function over $\C$.
+Note that $\tf(s)$
+        is defined only if the matrix pencil $(\A,\E)$ is regular, meaning that the matrix $\A-s \E$ is invertible for all but a finite set of eigenvalues.  
+
+For a general MIMO transfer-function \eqref{eq:tfunc} where $\CC=\mat{\Cc_1 & \Cc_2 & \cdots  &\Cc_\nout}$ and 
+$\BB=\mat{\Bb_1& \Bb_2&\ldots&\Bb_\nin}$, we can consider \eqref{eq:tfunc} to be $\nin \nout$ scalar-valued SISO (single input single output) transfer-functions 
+\[
+\tf_{ij}(s) = \Cc_i^T \left(s\E-\A\right)^{-1} \Bb_j \in \C, 
+\]
+and for example in the $2\times 2$ case we have 
+\[
+\tf(s) = \mat{\tf_{11}(s) & \tf_{12}(s) \\ \tf_{21}(s) & \tf_{22}(s)}.
+\]
+
+\subsubsection{Frequency response}
+We are primarily interested in producing a reduced-order system that exhibits the same frequency response as the original system, up to some error.  Frequency response $\tf(i \omega)$   is the transfer function over the positive $\Im$-axis. 
+Figure~\ref{fig:ex1b_tfunc} illustrates the relationship between the transfer function domain and its frequency response gain $\vert \tf(2\pi i f) \vert$ plot of a test-system.  \ref{fig:gain1} in particular is the $(1,1)$ component $\tf_{11}(2\pi i f)$ of a $16\times 16$ MIMO circuit model \texttt{ex1841} over  frequencies $f\in \left[10^8,10^{10}\right]$.
+ \begin{figure}[htbp]
+                \centering
+             \subfloat[\label{fig:gain1}]{\putfig{.48}{ex1841s1_urm_tfuncS.PNG}} \hfill       
+              \subfloat[\label{fig:splane}]{\putfig{.48}{Splane2.png}} 
+                \caption{Frequency response gain $\vert \tf(2\pi i f) \vert$ for a 
+                single-input, single-output (SISO) model with $f\in \left[10^8,10^{10}\right]$.  It is plotted on a semi-log scale (logarithmic for gain-axis, linear for $f$-axis).  The plot \subref{fig:gain1} is what $\vert \tf(s) \vert$  looks like over the segment $S$ in \subref{fig:splane}. We are generally interested in approximating $\tf(s)$ accurately over an interval 
+$S=i(\omega_0, \omega_1)$ on the $\Im$-axis.}
+                \label{fig:ex1b_tfunc}
+ \end{figure}
+
+
+\subsection{Moments}        \label{sec:moments}
+\index{transfer-function!moments of}
+The transfer-function is a rational function, and thus can be represented by a Taylor series about an expansion-point $\sigma\in\C$, having the general form 
+\begin{equation}
+                \tf(s) = \sum_{j=0}^\infty (s-\sigma )^j \mo{j},  \quad \text{or equivalently,}\quad
+  \tf(s+\sigma) = \sum_{j=0}^\infty s^j \mo{j}
+                \label{eq:tfunc_taylor}
+        \end{equation}
+        where the Taylor coefficient 
+\begin{equation}
+\mo{j} =\left. \dfrac{1}{j !}\dfrac{d^j \tf}{d s^j}\right|_{s=\sigma}
+\label{eq:moment_def}
+\end{equation}
+is called the $j$-th \emph{moment} of the transfer-function about $\sigma$.
+
+
+
+\subsubsection{Moment-matching}
+\index{moment-matching}
+Krylov-subspace  projection methods boast moment-matching properties, which we prove as theorems~\ref{thm:implicit_ROM_moment_matching} and \ref{thm:explicit_ROM_moment_matching} in \S\ref{sec:moment_matching_proofs}.  Moment matching means that the reduced-order model transfer-function implied by a Krylov-subspace  method is guaranteed to share a number of  terms of the Taylor series with that of the full unreduced model, about a given expansion-point $\sigma$.  
+
+ Suppose the URM (unreduced model) transfer-function expressed as a Taylor series about $\sigma$ is 
+\[
+\tf(s) = \mo{0} + (s-\sigma)\mo{1} + (s-\sigma)^2 \mo{2} + \cdots +(s-\sigma)^{n-1} \mo{{n-1}} + \cdots.
+\]
+A reduced-order model (ROM) whose transfer-function can be written as 
+\[
+\tfexp(s) = \moexp{0}  + (s-\sigma)\moexp{1} + (s-\sigma)^2 \moexp{2} + \cdots +(s-\sigma)^{n-1} \moexp{n-1} + \cdots
+\]
+where 
+\[
+\moexp{j} = \mo{j} \quad\text{for}\quad j=0,1,2,\cdots,n-1
+\]
+  is said to match $n$-moments about $\sigma$.  
+
+Moments can be matched about any number of expansion-points; also called interpolation-points.
+
+\subsection{Shift-invert representation of the transfer-function}
+Moment matching properties of Krylov-subspace  methods are accomplished via the the following reformulation of the transfer-function \eqref{eq:tfunc}.
+
+ Let $\sigma\in\C$ be a point for which $\sigma \E-\A$ is invertible. Then
+        \begin{align}
+                        \tf(s) &= \CC^T\left(s\E-\A\right)^{-1}\BB\nonumber\\
+					&= \CC^T\left(\sigma \E - \A + (s-\sigma)\E\right)^{-1}\BB\nonumber\\
+                                &= \CC^T\left(I-(s-\sigma)\H\right)^{-1}\RR 
+        \label{eq:tfunc_single_matrix}
+        \end{align}
+        where\footnote{To verify \eqref{eq:tfunc_single_matrix}, note that $I=(\sigma \E - \A)^{-1}(\sigma \E - \A)$.}
+        \begin{equation}
+                        \H := (\A - \sigma \E)^{-1}\E\quad\textrm{and}\quad \RR := (\sigma \E-\A)^{-1}\BB.        
+        \label{eq:singlematrixdefs}
+        \end{equation}
+  \eqref{eq:tfunc_single_matrix} is sometimes called the shifted transfer-function formulation, with shift $\sigma$, although it does not depend on $\sigma$.   The shift matters when we consider the ROM transfer-function that approximates \eqref{eq:tfunc_single_matrix}.
+
+ In Krylov subspace methods the generally non-sparse $\H = \H(\sigma)\in\C^{N\times N}$ is a sort of operator or multiplier that acts on $\RR=\RR(\sigma)\in\C^{N \times \nout}$.    $\H$ is dense in general and is rarely if ever explicitly formed.  We only need a way to obtain matrix-vector products $\H v$ for vectors $v\in\C^N$. 
+
+The shifted transfer-function representation \eqref{eq:tfunc_single_matrix} can alternatively be considered the transfer-function for the shifted descriptor system
+ \begin{equation}
+         \begin{aligned}
+                \H \frac{dx}{dt} &= (I - \sigma \H) x + \RR u\\
+                y &= \CC^T x,
+        \end{aligned}
+        \label{eq:ds1_shifted}
+        \end{equation}   
+which is equivalent to \eqref{eq:ds1} for any $\sigma$ such that $\A - \sigma \E$ is invertible.  Some order-reduction schemes notably  work by replacing $\H$, $\RR$, and and $\CC$ with reduced-order approximations $\Himp = V^T \H V$, $\rrimp_n = V^T \RR$, and $\CC_n = V^T \CC$.    We call such a ROM \emph{implicitly} projected on to $\spn V$, as opposed to the \emph{explicitly} projected model \eqref{eq:ds1_expROM}.   A model obtained via implicit-projection is not equivalent to \eqref{eq:ds1_expROM} in general and is undesirable for some applications because the ROM can contain unstable modes, but it is cheaper to construct because $\Himp$ and $\rrimp$ are produced by the same (Krylov) process that creates the basis $V$.  Then the only explicit computation needed to construct the ROM transfer-function is  $\CC_n = V^T \CC$.
+ 
+\subsubsection{Moment representation}
+We now express transfer-function moments about $\sigma$ in terms of $\H$ and $\RR$. 
+        Via Neumann series expansion (power series for matrices) re-write \eqref{eq:tfunc_single_matrix} as
+        
+\begin{equation}
+\begin{aligned}
+                \tf(s) &= \CC^T\left(\sum_{j=0}^\infty (s-\sigma )^j\H^j\right)\RR \\
+			    &= \sum_{j=0}^\infty (s-\sigma )^j \CC^T \H^j \RR. 
+         \end{aligned}
+\label{eq:neumann}
+\end{equation}
+
+
+   The moments $\mo{j}$ from \eqref{eq:tfunc_taylor} are specified exactly in \eqref{eq:neumann}: 
+\begin{equation}
+\mo{j} = \CC^T \H^j \RR.
+\label{eq:tfunc_moment}
+\end{equation}
+
+
+\begin{comment} %%%%%%%%%%%%%%
+\subsubsection{Region of convergence for moment-matching}
+\index{moment-matching!region of convergence} The power (Taylor) series representation seems to imply that \eqref{eq:neumann} is only valid for $s$ in a disc of radius $1/\nrm{op}{\H}$ around $\sigma$, where the operator norm
+\[
+ \nrm{op}{\H} =  \sup_{v\neq 0}\left\{  \dfrac{\nrm{}{\H v}}{ \nrm{} {v} } \right\}.
+\]
+ Then certainly $\nrm{op}{\H} \geq | \lambda_1 |$, where $\lambda_1$ is the largest eigenvalue of $\H$. 
+Equivalently,   $\nrm{op}{\H} \geq 1/| (\mu_1-\sigma) |$ where $\mu_1$ is the closest pole to $\sigma$.   Thus, the 
+region of convergence for \eqref{eq:neumann} is the largest disc centered at $\sigma$ that does not contain a pole (see \S\ref{sec:pole_residue}).   The closer $\sigma$ is to a pole of the transfer-function, the smaller region of convergence we theoretically have for moment-matching about $\sigma$.  In practice Krylov-subspace  methods are observed to converge well outside of the theoretical region of convergence.  This is in fact the case for every example model 
+\end{comment}  %%%%%%%%%%%%%%%%%
+
+\subsection{Invariant-subspaces }\label{sec:invariant_subspaces }
+
+\index{invariant-subspace }
+Given a transformation $\H:\C^N \rightarrow \C^N$, a subspace  $\Q$ of $\C^N$ is called $\H$-invariant if
+\begin{equation}
+\H\Q \subseteq \Q.
+\label{eq:op_invariance}
+\end{equation}
+
+Fore example, the span of a set of eigenvectors of $\H$ is an invariant subspace under $\H$.
+
+
+If $Q$ is a basis for $\Q$ then
+\begin{equation}
+\H Q = Q T
+\label{eq:similarity}
+\end{equation}
+for some matrix $T\in\C^{\ell\times\ell}$.  If the basis vectors are eigenvectors $Z$ then \eqref{eq:similarity} becomes
+\[
+\H Z = \Lambda Z,
+\] 
+where $\Lambda = \text{diag} \{ \lambda_1, \lambda_2, ...,\lambda_\ell \}$ is a diagonal matrix of eigenvectors associated with the vectors
+ $Z = \mat{z_1 & z_2 & \cdots & z_\ell}$. 
+\index{Schur vectors}
+
+If the basis $Q=\mat{u_1 & u_2 & \cdots & u_\ell}$ for the $\H$-invariant-subspace  
+\[
+\Q = \spn \mat{u_1 & u_2 & \cdots & u_\ell}=\spn \mat{z_1 & z_2 & \cdots & z_\ell}
+\] 
+is orthonormal then we call vectors $u_j$ Schur-vectors and sometimes call $\Q$ a Schur space.   Also, \eqref{eq:similarity} is called a Schur-decomposition, and $T$ is upper triangular with eigenvalues $\lambda_j$ associated with $z_j$ along its diagonal.   
+
+
+\medskip
+\subsubsection{Generalized-eigenvalues and invariance}
+ An eigenvalue \index{eigenvalue, eigenvector (generalized)} of  matrix pencil $(\A,\E)$, called  a generalized eigenvalue, is a $\mu\in\C$ such that $(\A-\mu \E)z=0$ has nonzero solutions $z\neq 0\in\C^N$, which are the right-eigenvectors of $(\A,\E)$.
+
+\bigskip
+The notion of invariance under a general operator $\H$ extends to that of a matrix pencil. The subspace  $\Q = \spn Z$ is  called invariant, or deflating, \cite{stewart1972sensitivity} with respect to $(\A,\E)$ if
+\begin{equation}
+\dim \left(\A \Q + \E \Q  \right) \leq \dim \Q.
+\label{eq:generalized_invariance1}
+\end{equation}
+ For a regular matrix pencil $(\A,\E)$ and any $\sigma\in\C$ that is not an eigenvalue of $(\A,\E)$ it is shown in \cite{gracia1995stability} that $(\A,\E)$-invariance is equivalent to $\H$-invariance for 
+\begin{equation}
+\H = (\A-\sigma \E)^{-1} \E, 
+\label{eq:AE}
+\end{equation}
+which happens to be the shift-invert operator defined by \eqref{eq:singlematrixdefs}.   
+
+\smallskip
+Then $\H(\sigma)=(\A-\sigma \E)^{-1} \E$ has the same eigenvectors (regardless of $\sigma$) as the pencil $(\A,\E)$.   An eigenvalue $\lambda$ of $\H$ and its corresponding eigenvalue $\mu$ of $(\A,\E)$ are related by   
+\begin{equation}
+      \lambda = \frac{1}{\mu-\sigma}, \qquad \mu = \sigma + \frac{1}{\lambda}
+	\label{eq:pole_eig}
+\end{equation}
+and they share the same eigenvector. That is, 
+\[
+\begin{aligned}
+\H z &= \lambda z \\
+&= \left( \frac{1}{\mu-\sigma} \right) z
+\end{aligned}
+ \quad \Longleftrightarrow \quad 
+\begin{aligned}
+\A z &= \mu \E z \\
+&= \left(\sigma + \frac{1}{\lambda}\right)\E z
+\end{aligned} 	
+\]
+To see this, observe that 
+\begin{equation}
+\begin{aligned}
+(\mu \E - \A) &= \left[ (\mu-\sigma)\E + (\sigma \E-\A)                     \right]  \\
+&= [ (\mu-\sigma)\underbrace{(\sigma \E-\A)^{-1}\E}_{-\H} + I ]  \\
+&= \left[ (\mu-\sigma)\H - I                                \right]  \\
+&= \left[ \H-\left(\frac{1}{\mu-\sigma}\right)I             \right]  \\
+&= ( \H-\lambda I  ) .
+\end{aligned}
+\label{eq:shift_invariance}
+\end{equation}
+\eqref{eq:shift_invariance} shows that invariant-subspaces  under the shifted operator $\H(\sigma)$ do not depend on $\sigma$.  This is useful because if we decide to change the shift $\sigma$, any previously discovered invariant-subspace  will be still be invariant under the new operator.
+
+\subsection{Pole-Residue representation}\label{sec:pole_residue}
+Recall the transfer-function  
+\begin{equation}
+\tf(s) = \CC^T\left(s\E-\A\right)^{-1}\BB,\tag{\ref{eq:tfunc}}
+\end{equation}
+which includes the linear matrix pencil $(\A,\E)$.  
+Poles of the transfer-function \eqref{eq:tfunc} are values $\mu\in\C \cup \infty$ such that $\|\tf(\mu)\|=\infty$. Poles of $\tf(s)$ are eigenvalues of the matrix pencil $(\A,\E)$, but their significance is determined by $\BB$ and $\CC$. 
+
+Figure~\ref{fig:full1841s11} illustrates influence of poles and zeros on the transfer-function.
+
+
+\begin{figure}[htb]
+\centering
+\putfig{1}{1841s11_thin.png}
+\caption{\label{fig:full1841s11}Transfer function gain  $\vert \tf(s) \vert$ of example system \texttt{ex1481s11}, plotted over a rectangular region $(-10^{9}, 10^{9}) \times i(10^{8}, 10^{10.1}) $ of the complex-plane, with linear scaling for the axes. The frequency response (also shown in figure~\ref{fig:gain1}) is highlighted over $i(10^9, 10^{10})$ in white, and the contour plot below indicates the dominant poles and zeros near the $\Im$-axis.   Observe the influence of poles and zeros on the frequency response (the white curve).  Poles with large residues appear more massive, like large splashes on a pond.  We also see large poles and zeros that appear to be separating into several smaller ones. Proximity to the $\Im$-axis determines whether a pole or zero causes a sharp peak in gain or has a gentler influence.  
+This transfer function plot is actually an $n=300$ ROM of a model whose original size is $N=1841$. For this model, $n=300$, by virtually any method, is large enough to be a very good approximation.  Indeed, we rely on model reduction to make such a plot, as computing it with the original model would take too long to be practical with available computers.  It involves solving a $300 \times 300$ system $\tf(s)=\CC^T(\A-s\E)^{-1}\BB$ for every value of $s$, rather than an $1841 \times 1841$ system.}  
+\end{figure}
+
+
+
+\begin{comment}%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Poles and residues of the standard transfer-function formulation}
+Let us assume that $(\A,\E)$ has a full eigen-decomposition 
+        \begin{equation*}
+                \A Z = \E Z \M \quad \text{and}\quad \A^T W = \E^T W \M 
+        \label{eq:genEigDecomp}
+        \end{equation*}
+        where $Z,W\in\C^{N\times N}$ represent the
+        right and left eigen-spaces of $(\A,\E)$, respectively, and $\M$ is the diagonal matrix of eigenvalues $\mu_j\in\C \cup \{\infty\}$.  Note that since $\A$ and $\E$ are real, every eigenvalue is real, infinite,  or is one of a complex conjugate pair.
+   
+The left and right eigenvectors are orthogonal, and can be scaled\footnote{This scaling is not generally the default for eigensolver algorithms.}  so that $\c{W} \E Z = I$. Then 
+
+\begin{equation}
+\begin{aligned}
+\tf(s) &= \CC^T(s\E-\A)^{-1}\BB\\
+ &= \CC^T ( W^{-H} (sI-\M) Z^{-1} )^{-1}\BB \\
+ &= \CC^T Z (sI-\M)^{-1} \c{W} \BB \\
+ &= \CC^T Z \left(\sum_{j=1}^\npol \dfrac{1}{s-\mu_j} \right) \c{W} \BB.\\
+\end{aligned}
+\label{eq:tfunc_eigen}
+\end{equation}
+The pole (eigen) decomposition \eqref{eq:tfunc_eigen}  of the transfer-function suggests that it can be approximated using eigen-pairs of $(\A,\E)$.
+
+\bigskip 
+For the sake of expressing \eqref{eq:tfunc_eigen} without clutter we assumed all eigenvalues are simple and finite.  Actually, multiple eigenvalues are possible and eigenvalues at infinity are inevitable because $\E$ is singular.  The eigen-space associated with infinite eigenvalues is the nullspace of $\E$. 
+
+Recall the left and right hand sides $\CC^T Z\in \C^{\nout \times N}$ and $\c{W} \BB\in \C^{N\times \nin}$ from \eqref{eq:tfunc_eigen} and consider the partitions 
+\[
+\CC^T Z = \mat{\hat{c}_1 & \hat{c}_2 &\cdots&\hat{c}_N}
+\]
+and 
+\[
+\BB^T W = \mat{\hat{b}_1 & \hat{b}_2 &\cdots&\hat{b}_N}
+\]
+into $N$ columns.
+
+Then we can express the the pole-residue form of transfer-function \eqref{eq:tfunc} as 
+\begin{equation}
+          \tf(s)  =  \sum_{\mu_j=\infty} \hat{c}_j \hat{b}_j^T +
+			   \sum_{\mu_j\neq\infty} \frac{\hat{c}_j \hat{b}_j^T}{s-\mu_j}\label{eq:comp_pole_sum}.
+\end{equation}
+Note that $\hat{c}_j$ and $\hat{b}_j$ are scalars if this is a SISO model. Generally, $\hat{c}_j \hat{b}_j^T\in\C^{\nout \times \nin}$.  The transpose $\hat{b}_j^T$ is in fact a transpose and not a conjugate-transpose, even if $\hat{b}_j$ is complex-valued.  
+ 
+
+\smallskip
+ Our necessary assumption  $\c{W} \E Z = I$ is not the default scaling for eigensolvers in practice.  In that case, we must consider the scaling factor
+\[
+\xi_j = 1 / w_j^H \E z_j
+\]
+for $j=1,2,\ldots,q$ and \eqref{eq:comp_pole_sum} generalizes to 
+\begin{equation}
+          \tf(s)  =  \sum_{\mu_j=\infty} \xi_j\hat{c}_j \hat{b}_j^T +
+			   \sum_{\mu_j\neq\infty} \xi_j\frac{\hat{c}_j \hat{b}_j^T}{s-\mu_j}\label{eq:comp_pole_sum_gen}.
+\end{equation}
+\end{comment}
+
+
+
+\subsubsection{Poles and residues of the implicit (shifted) transfer-function}\label{sec:polewts_shifted}
+Consider  the so-called $\sigma$-shifted transfer-function 
+\[
+\tf(s) = \CC^T \left(I - (s-\sigma)\H \right)^{-1} \RR \tag{\ref{eq:tfunc_single_matrix}},
+\] 
+rather than the standard formulation \eqref{eq:tfunc}.  
+
+ Assume that $\H$ is diagonalizable with right-eigenbasis $Z$, so that    
+\[
+\H Z =  Z \Lambda 
+\] 
+for a $N\times N$ diagonal matrix $\Lambda= \text{diag}(\lambda_1, \lambda_2,\ldots,\lambda_N)$ of eigenvalues.
+
+Then
+\begin{align}
+\tf(s) &= \CC^T (I - (s-\sigma)\H )^{-1} \RR\nonumber\\
+&= \CC^T \left( Z (I - (s-\sigma)\Lambda )Z^{-1} \right)^{-1} \RR \nonumber\\
+&= (\CC^T Z) \Delta(s) (Z^{-1}\RR)
+\end{align}
+where $\Delta(s)=\left( I - (s-\sigma)\Lambda \right)^{-1}$ is a diagonal matrix with diagonal entries $\delta_{j}(s) =1-(s-\sigma)\lambda_j$, or equivalently
+\begin{equation}
+\delta_{j}(s) =
+\begin{cases}
+\dfrac{\sigma-\mu_j}{s-\mu_j},   & \mu_j \neq \infty\\
+1, & \mu_j = \infty. 
+\end{cases}
+\label{eq:delta_def}
+\end{equation}
+
+Then for 
+\[
+\CC^T Z = \mat{\hat{f}_1 & \hat{f}_2 &\cdots&\hat{f}_N} \quad\text{and}\quad
+(Z^{-1}\RR)^T = \mat{\hat{g}_1 & \hat{g}_2 &\cdots&\hat{g}_N},
+\]
+we have
+\begin{align}
+\tf(s) &= \sum_j \frac{\hat{f}_j\hat{g}_j^T}{1-(s-\sigma)\lambda_j} \label{eq:comp_eig_sum}\\
+&= \sum_{\lambda_j=0} \hat{f}_j\hat{g}_j^T + \sum_{\lambda_j \neq 0} \frac{\sigma-\mu_j}{s-\mu_j}\hat{f}_j\hat{g}_j^T\nonumber\\
+&= \sum_j \delta_j(s) \hat{f}_j \hat{g}_j^T,\label{eq:comp_pole_alt} 
+\end{align}
+where $\delta_j(s)$ is from \eqref{eq:delta_def}. The transpose $\hat{g}_j^T$ is in fact a standard (not-conjugated) transpose, even if $\hat{g}_j$ is complex-valued.   Both  $\hat{f}_j$ and $\hat{g}_j^T$ are scalars in the SISO case.
+Note that a zero eigenvalue $\lambda_j=0$ of $\H$ corresponds to an infinite $\mu_j=\infty$ pole (eigenvalue of $(\A,\E)$). 
+
+
+\subsection{Pole-weight}\label{sec:pole_dominance}
+\index{pole!dominance}
+Poles of the transfer-function $\tf(s) = \CC^T\left(s\E-\A\right)^{-1}\BB$ are values $\mu\in\C \cup \infty$ such that $\|\tf(\mu)\|=\infty$. Poles of $\tf(s)$ are eigenvalues of the matrix pencil $(\A,\E)$, but their significance is determined by $\BB$ and $\CC$. Pole dominance is a notion of a pole's influence on the transfer-function frequency response $\tf(i \omega)$ on an interval of the $\Im$-axis (or all of it).   
+\index{pole!weight}
+Pole-residue formulation  %\eqref{eq:comp_pole_sum_gen} and
+ \eqref{eq:comp_pole_alt} suggests a hierarchy of poles' importance for approximation.  
+
+ We define a measure of pole-dominance, which we call its \emph{weight} with respect to the frequency response domain $i[\omega_1,\omega_2]\subset\C$.  It is similar to the modal dominance index (MDI) of \cite{Aguirre}, but it considers a pole's influence over the frequency response domain rather than all of the positive $\Im$-axis, and it does not blow-up for poles on or near the $\Im$-axis.  Basically we add $1$ to the denominator.    
+
+ If we take the norm of \eqref{eq:comp_pole_alt} over the interval $i[\omega_1,\omega_2]$ of interest on the $\Im$-axis, we have 
+\begin{equation}
+\nrm{}{\tf(i\omega)} \leq  \sum_j \nrm{}{\delta_j(i\omega)} \|\hat{f}_j\| \nrm{}{\hat{g}_j},
+\label{eq:system_mass}
+\end{equation}
+which is a sum of positive numbers, each one associated with a pole $\mu_j$.  We call this positive number the weight of the pole.  A relatively large pole-weight 
+\begin{equation}
+\gamma_j =  \nrm{}{\delta_j(i\omega)} \|\hat{f}_j\| \nrm{}{\hat{g}_j}
+\label{eq:pole_weight}
+\end{equation}
+indicates that $\mu_j$ is a so-called dominant pole.   
+
+
+
+The scalar-valued function $\delta_j(i\omega)$ represents the influence of pole $\mu_j$ on the system frequency response via its proximity to the segment $i[\omega_1,\omega_2]$ of interest, and we take its maximum value 
+\begin{align}
+\nrm{\infty}{\delta_j(i\omega)} &= \max_{\omega\in [\omega_1,\omega_2]}| \delta_j(i\omega)|\nonumber\\
+&= \begin{cases}
+\dfrac{| \sigma-\mu_j|}{1+\min\{|\mu_j-\omega_1|,|\mu_j -\omega_2|,|\Re(\mu_j)|  \}},   & \mu_j \neq \infty\\
+1, & \mu_j = \infty
+\end{cases}
+\label{eq:pole_wt_delta}
+\end{align}
+over that interval as a sense of its over-all influence on the transfer-function in that region.
+The value $\min\{|\mu_j-\omega_1|,|\mu_j -\omega_2|,|\Re(\mu_j)|  \}$ is merely the distance of $\mu_j$ to the segment $i[\omega_1,\omega_2]$, as illustrated in figure~\ref{fig:MDI_examp}.  Conjugate pairs must be considered together, so when determining weight we actually consider $\Re(\mu_j)+ i|\Im(\mu_j) |$, rather than $\mu_j$. That way, each member of the pair gets assigned the same weight.
+\begin{figure}
+\centering
+\putfig{1}{MDI_examp.png}
+\caption{\label{fig:MDI_examp} This plot illustrates minimum distance $\min\{|\mu_j-\omega_1|,|\mu_j -\omega_2|,|\Re(\mu_j)|  \}$  to the ``segment of interest'' that we use to compute \eqref{eq:pole_wt_delta}. The red (solid) segment on the $\Im$-axis is the segment $i(\omega_0, \omega_1)$ ``of interest''.  The arrows indicate how we define a pole's distance to the segment, which we use to determine the pole's weight. Conjugate pairs must be considered together, so when determining weight we always consider $\Re(\mu)+ i|\Im(\mu) |$, rather than $\mu$. That way, each member of the pair gets assigned the same weight.}
+\end{figure}
+
+\subsubsection{Total system-weight}
+The right-hand-side of \eqref{eq:system_mass} (i.e. $\sum_j \gamma_j$),
+ is the total weight of the system \eqref{eq:ds1} with respect to $ i[\omega_1,\omega_2]$, and we attempted to use it as a measure of ROM convergence.  In numerical experiments we found that the the combined weight of a few dominant poles often comprises most of a system's total weight.  A plotted example of that is in figure~\ref{fig:308benchmark2}
+
+
+\section{Reduced-order transfer-function via projection }\label{sec:projected_ROMs}
+The URM (unreduced-model) transfer-function \eqref{eq:tfunc} and  its shifted variant \eqref{eq:tfunc_single_matrix} are mathematically equivalent. For large applications however, we do not expect to use either formulation in its unreduced form, but rather a suitable reduced-order model.   Projection onto a subspace with basis $V$ implies two different ROM transfer-functions that are not equal in general.    The current literature does not seem to have different names for these two formulations so we will name them here.   First there is the ROM transfer function that we define via \emph{implicit} projection onto $V$.   The implicitly-projected ROM formulation was introduced as part of the PVL (\pade\ via Lanczos) method \cite{PVL} for model-reduction in 1995.     The second projected-ROM transfer-function formulation is called \emph{explicitly} projected onto $V$, and was introduced as the result of PRIMA (Passive Reduced-order Interconnect Macromodeling Algorithm) \cite{PRIMA} introduced a few years later.    Both methods use Krylov subspaces for projection.    
+
+\medskip
+Let $V\in\C^{N \times n}$ be a matrix with orthogonal columns that form a basis of our projection subspace.  
+If we make the orthogonal projections 
+\begin{equation*}
+          \A_n := V^T \A V, \quad \E_n := V^T \E V, \quad \CC_n := V^T\CC, \quad \BB_n := V^T\BB,
+          \tag{\ref{eq:exp_projections}}
+ \end{equation*}	
+of realization $(\A,\E,\BB,\CC)$,\footnote{assuming the matrix pencil $(\A_n,\E_n)$ is regular} the {\bf explicitly-projected} \index{transfer-function!projected!explicitly}\index{explicit-projection (ROM)} model $(\A_n,\E_n,\BB_n,\CC_n)$ has transfer-function    
+         \begin{equation}
+                        \tfexp_n(s) = \CC_n^T\left(s\E_n-\A_n\right)^{-1}\BB_n
+         \label{eq:rm_explicit}
+         \end{equation}
+The explicitly-projected ROM  has the property  that it is stable if the projection basis $V$ is real-valued, which is not true in general of the implicit projected transfer-function, described next. 
+
+Krylov-subspace  methods  use the operator $\H$ and operand $\RR$ from \eqref{eq:singlematrixdefs} to construct a basis $V$ and a projected operator matrix $\Himp\in \C^{n \times n}$ such that
+\begin{equation}
+\Himp = V^T \H V.
+\label{eq:projected_op}
+\end{equation}
+This permits what we call the ROM transfer-function via implicit-projection, or implicit transfer-function
+\index{transfer-function!projected!implicitly}\index{implicit-projection (ROM)}
+ \begin{align}
+      \tfimp_n(s) &=  \c{\CC_n} \left(I-(s-\sigma )\Himp\right)^{-1}\rrimp_n,
+      \label{eq:rm_implicit}
+      \end{align}
+      where
+      \[
+        \CC_n := \c{W} \CC \quad\textrm{and}\quad \rrimp_n := V^T \RR.
+      \]
+
+The ROM transfer-function \eqref{eq:rm_implicit}  is analogous to the ``shifted'' transfer-function \eqref{eq:tfunc_single_matrix}, only now the shift $\sigma\in\C$ is the interpolation point about which   \eqref{eq:rm_implicit} approximates \eqref{eq:tfunc_single_matrix}.
+
+We say \eqref{eq:rm_implicit} is a transfer-function via implicit-projection because it exists without a projected realization $(\A_n,\E_n,\BB_n,\CC_n)$ from \eqref{eq:exp_projections}.   The reduced model implied by \eqref{eq:rm_implicit} is actually
+  \begin{equation}
+         \begin{aligned}
+                \Himp \frac{d\tilde{x}}{dt} &=  (I+\sigma \Himp)\tilde{x} + \rrimp_n u\\
+                \hat{y} &= \CC_n^T \tilde{x},
+        \end{aligned}
+        \label{eq:implied_ds1}
+        \end{equation}
+which is not equivalent to the explicitly-projected system 
+ \begin{equation}
+         \begin{aligned}
+                \E_n \frac{dz}{dt} &= \A_nz + \BB_n u\\
+                \hat{y} &= \CC_n^T z,
+        \end{aligned}
+        \tag{\ref{eq:ds1_expROM}}
+        \end{equation}
+ given the same basis $V$, unless $V$ spans $\C^N$ (i.e. $n=N$) in which case they are both equivalent to the original system \eqref{eq:ds1}.   
+
+\medskip
+Even if the original system is passive and/or stable, the implicitly projected ROM is not necessarily passive or stable  which makes it less suitable as a ROM.   Some efforts  \cite{arnoldiMOR,grimme1996restart,jaimoukha1997implicitMOR} have been made to remedy this situation, but these methods tend to sacrifice moment-matching properties in the process. 
+
+\chapter{Order-reduction via Krylov-subspace projection}
+\label{ch:krylov_MOR_background}
+\section{Krylov-subspace  projection methods}\label{sec:projection}
+Recall two ways to express the system transfer-function $\tf:\C \rightarrow \C^{\nin \times \nout}$
+\begin{equation}
+                \tf(s) = \CC^T\left(s\E-\A\right)^{-1}\BB \tag{\ref{eq:tfunc}}, 
+\end{equation}
+and
+\begin{equation}
+\tf(s) = \CC^T\left(I-(s-\sigma)\H\right)^{-1} \RR \tag{\ref{eq:tfunc_single_matrix}}
+\end{equation}
+with $\H = (\A - \sigma \E)^{-1}\E\quad\textrm{and}\quad \RR = (\sigma \E-\A)^{-1}\BB$.  
+
+ \eqref{eq:tfunc} is the standard formulation and \eqref{eq:tfunc_single_matrix} is the so-called $\sigma$-shifted formulation, and $\H$ is sometimes called a shift-inverse or $\sigma$-shifted operator.  
+
+
+\subsection{The Krylov subspace}
+Krylov-subspace  projection methods are developed out of the power iteration with $\H$ acting on $\RR=\mat{\Rr_1 & \Rr_2 & \cdots & \Rr_\nin}$.
+   The goal of subspace  projection-based model order-reduction is to obtain a basis $V$ of a subspace  $\K$ of $\C^N$ on which to project our system realization in order to obtain a reduced model.    The Krylov-subspace  is the ideal subspace  to use for projection because  reduced-order models obtained via Krylov-subspaces  have moment-matching properties (\S\ref{sec:moments}).
+Reduced-order models obtained by projection onto non-Krylov-subspaces  do not have moment-matching properties in general. 
+\index{Krylov-subspace }
+     The \emph{$n$-th Krylov-subspace} induced by $\H$ and a vector $\Rr$ is
+      \begin{equation}
+          \krylov{n}{\H}{\Rr}= \spn \left\{\Rr, \H \Rr, \H^2\Rr,\ldots, \H^{n-1}\Rr\right\}.
+          \label{eq:krylov_def}
+      \end{equation}
+For the $n$-th \emph{block} Krylov-subspace 
+	\begin{align}
+          \krylov{n}{\H}{\RR}
+             &= \spn \left\{\RR, \H \RR, \H^2\RR,\ldots\H^\eta\RR\right\}
+	\label{eq:block_krylov_def}
+      \end{align}
+$n$ is the dimension of the subspace, not the number $\eta$ of powers of $\H$ that are involved.   
+
+Krylov-subspace  projection methods for MOR come out of methods for  finding eigenvalues, so we will first address general projection methods and Krylov projection methods for eigensolving, then delve into their application to MOR.  
+
+
+\section{The Arnoldi process}
+   \label{sec:arnoldi}\index{Arnoldi's method}
+   An $n$-iteration  cycle of Arnoldi's algorithm constructs a basis $V$ for the Krylov 
+   subspace  $\krylov{n}{\H}{\Rr}$, and the projected operator $\Himp = V^T \H V$, a strictly upper-Hessenberg matrix. 
+
+\begin{algorithm}[htb]% note this is being handled by the algorithm2e package
+\DontPrintSemicolon
+\SetKwComment{tcp}{\% }{}
+\KwIn{$\Rr\in\C^N$, $\H\in\C^{N\times N}$ (or some way to compute $\H v$ for $v\in\C^N$)}
+\KwOut{orthonormal $V\in\C^{N\times n}$, Upper Hessenberg $\Himp\in\C^{n\times n}$  where  $\spn V  = \krylov{n}{\H}{\Rr}$, and $\Himp = V^T\H V$}
+
+$r_0 := \Rr$ \;
+$v_1 := r_0 / \nrm{2}{r_0}$\;
+\For{$k = 1$ \KwTo $n$} {
+	$r_k := \H v_{k}$\; \label{Arnoldi_mult}
+
+	\For(\qquad\tcp*[h]{Make $r_k$ orthogonal to previous $\{v_1,v_2...,v_k\}$}){ $j = 1$ \KwTo $k$}{	\label{Arnoldi_ortho1}
+		$h_{jk} := \c{v_k}r_k$ \label{Arnoldi_ortho1_5} \;
+		$r_k := r_k - h_{jk}v_j$\; \label{Arnoldi_ortho2}
+}
+\BlankLine
+	\If{$\nrm{2}{r_k} \neq 0$}{
+	$h_{j+1,j} := \nrm{2}{r_k}$\;
+	$v_{k+1} := r_k / \nrm{2}{r_k}$\;
+	}
+	\lElse{exit $k$-loop}
+}
+\KwRet{$V=\mat{v_1&v_2&\cdots&v_n}$, $\vh_n=v_{n+1}h_{n+1,n}$, $\Himp = \mat{h_{ij}}$}\;
+\caption{{\sc Arnoldi}}
+\label{alg:arnoldi}
+\end{algorithm}
+
+The Arnoldi process (Algorithm~\ref{alg:arnoldi}) basically performs a power iteration and orthogonalizes each iterate against previous ones, thus producing an orthonormal basis for \eqref{eq:krylov_def}.   The most costly part of the algorithm is the matrix-vector product (line~\ref{Arnoldi_mult}), followed by the orthogonalization part (lines \ref{Arnoldi_ortho1}-\ref{Arnoldi_ortho2}).  
+Algorithm~\ref{alg:arnoldi} uses Modified Gram-Schmidt for orthogonalization but there are variants of the Arnoldi process that use other orthogonalization methods. A notable alternative uses Householder reflectors making for a more stable and more costly method.   
+
+\subsection{Complexity of Arnoldi (with MGS orthogonalization)}\label{sec:complexity1}
+Take an $n$-iteration Arnoldi cycle with a general matrix $\H$: there are $n$ matrix-vector products $\H v_k$ (line~\ref{Arnoldi_mult}),  each requiring $N^2$ scalar multiplications (flops). With Modified Gram-Schmidt (MGS) as the orthogonalization process, we have $1+2+\cdots+n = n(n+1)/2$ inner-products (line \ref{Arnoldi_ortho1_5}) and an equal number of AXPYs\footnote{\index{AXPY operation}$\alpha X+Y$ operations where $\alpha$ is a scalar and $X$ and $Y$ are vectors.} (line \ref{Arnoldi_ortho2}), each requiring  $N$ flops.   Note that the $k$-th step of Arnoldi requires $kN$ flops for orthogonalization.  The process takes longer for each iterate, eventually grinding to a crawl if $N$ is large.  The total cost of an $n$-iteration cycle of Arnoldi method is roughly 
+$n N^2 + n^2 N$
+flops: 
+$n N^2$ flops for matrix-vector products (sometimes called matvecs), and $n^2 N$ flops for  orthogonalization.    For large $N$ the computational cost of Arnoldi is dominated by matvecs.   It should be noted that the $\sigma$-shifted inverse operator $\H = (\A - \sigma \E)^{-1}\E$ used for model reduction is not a general, dense matrix.   The ``matrix-vector product'' 
+\[
+\H v = Q \left[ U^{-1}L^{-1} \BB (Pv) \right] 
+\]
+is actually implemented as a pair of sparse triangular solves requiring at most 
+\[
+2\nnz(U)+2\nnz(L) \leq 2N(N+1)
+\]
+ flops, where $\nnz(T)\leq N(N+1)/2$ is the number of nonzero entries of an $N\times N$ triangular matrix $T$.    The computation of these ``matvecs'' is still $\bigO{N^2}$ so we may view the operation as a matrix-vector product, as long as we consider the one-time cost of sparse $LU= P \H Q$ factorization. 
+
+ The Arnoldi algorithm requires $(n+1)N$ units of storage for the basis vectors $v_j\in V$, which is also an issue in large applications. 
+  
+We consider the ROM size $n$ to be negligible in comparison to the order $N$ of the full model.  Computation and storage cost are major issues when $N$ is large.  For a model of size $n$ we have no choice but to compute $n$ applications of $\H$ to a vector in $\C^N$, each costing $\bigO{N^2}$.  Restarted  Krylov methods attempt to make the process more computationally manageable by reducing the  amount of orthogonalization.  Since latter iterations require the most computation, the idea is to start over at a certain point. 
+
+
+\subsection{ROM size vs. construction cost}
+Ultimately the goal of model order-reduction is to produce a small, accurate model (we would like to minimize $n$ and model approximation error\footnote{one measure of this is $\nrm{}{\tf -\tf_n}$ in some norm.}), but the time taken to construct the model needs to be considered as well.  In some applications, once a ROM is constructed it gets used repeatedly for several computations.  Consider the case where producing the model (or several models) is itself the major expense.  We may, for example, only need to solve the system once and the original system of order $N$ is just too large to solve.  Maybe a new ROM needs to be generated at every step in some sequence.   ROM construction efficiency is where Krylov methods excel.   This distinction is important because it sets the context when discussing the best model reduction method for a particular application. 
+
+ 
+\subsection{The Arnoldi relation}
+   An $n$-step cycle of the Arnoldi process with $\H$ and $\Rr$ yields the so-called Arnoldi relation
+   
+\begin{equation}     
+  \begin{aligned}
+           \H V &= \mat{V& v_{n+1}} \mat{\longleftarrow&\Himp& \longrightarrow\\ 0 &\cdots & h_{n+1,n} }  \\
+			  &= V\Himp +\ h_{n+1,n} v_{n+1} e_n^{T}\\
+			&= V\Himp +\ \vh_n e_n^{T}
+   \end{aligned}
+ \label{eq:arnoldi_relation}
+\end{equation}
+   where $V\in\C^{N\times n}$ is the orthogonal basis matrix for 
+   $\krylov{n}{\H}{\Rr}$, starting with $v_1 = \Rr/\nrm{2}{\Rr}$, and the upper Hessenberg matrix 
+   $\Himp\in\C^{n\times n}$ 
+   is the Petrov-Galerkin projection of $\H$ on to that space (also known as the Arnoldi matrix), and can be considered a reduced-order spectral approximation to $\H$, because eigenvalues of $\Himp$ approximate those of $\H$.    The largest eigenvalues of $\Himp$ are the most accurate, a property inherited from the power iteration.
+
+\begin{comment}
+\subsubsection{The remaining candidate-vector}
+The last (n-th) candidate-vector $\vh_n = h_{n+1,n} v_{n+1}$ of algorithm~\ref{alg:arnoldi} is a notable quantity because it represents the error of the approximation $\H V \approx V \Himp$ (of $V$ to an invariant-subspace ).   One expects the sequence to decrease in general, since $\nrm{}{\vh_n}$ is zero for $n\geq d(\H,\Rr)\leq N$, but it is not monotonically decreasing.    From a model reduction standpoint, a satisfactory model can be obtained without having $n$ large enough to make $\nrm{}{\vh_n}$ small.   This is because $\nrm{}{\vh_n}$ represents the amount of new spectral information of $\H$ discovered on the $n$-th step, after previously discovered directions $v_j, j=1,2,...,n$ have been subtracted off.   A rapidly decreasing $\nrm{}{\vh_n}$ indicates that further iterations with $\H$ are not  producing much new spectral information.    Recall that eigenvalues of $\H$ correspond to poles of the transfer-function.   As long as new poles are being discovered (starting from $\sigma$ and moving outward), $\vh_n$ is rich with information.  The poles being discovered may or may not be significant in the sense of frequency response approximation, however.  
+\end{comment}
+
+ 
+\subsection{Approximate eigenvalues from Arnoldi relation} 
+Compared to $\H$, the matrix $\Himp$ is small enough for its eigenvalue decomposition 
+\[
+\Himp W = W \Lambda
+\]
+to be computed cheaply.
+
+ Ritz-values (eigenvalues $\lambda$ of $\Himp$) are approximate eigenvalues of the large operator $\H$, and long\footnote{vectors $w\in W$ are sometimes called short Ritz-vectors.} Ritz-vectors $Vw\in\krylov{n}{\H}{\Rr}$  are the associated approximate eigenvectors of $\H$. 
+
+ Left multiplying \eqref{eq:arnoldi_relation} with $W$  yields
+\begin{align}
+\H V W &= V\Himp W + \vh_n e_n^{T} W \nonumber\\
+	&= V W \Lambda + \vh_n e_n^{T} W \nonumber\\
+\\
+\H Z	&= Z \Lambda + \vh_n e_n^{T} W \label{eq:SISO_arnoldi_ritz_relation}
+\end{align}
+  so for $z_j = Vw_j$,
+\[
+\begin{aligned}
+\H z_j &=  \lambda z_j +  \xi_j \vh_n \\ 
+	  &=  \lambda z_j +  \xi_j h_{n+1,n} v_{n+1} 
+\end{aligned}
+\]
+where $\xi_j = (e_n^T W)_j=W_{nj}\in\C$ is the $j$-th entry of the bottom ($n$-th) row of $W$.  Here we see that every Ritz residual-vector
+\[
+\H z_j - \lambda_j z_j = \xi_j \vh_n
+\]
+given by \eqref{eq:SISO_arnoldi_ritz_relation}   is a scalar multiple of the residual-vector $\vh_n$.  Assuming $\nrm{2}{z_j}=1$, the Arnoldi-relation \eqref{eq:arnoldi_relation} thus implies a simple formulation
+\begin{equation}
+\text{rr}_j = \frac{\nrm{2}{\H z_j - \lambda_j z_j}}{\nrm{2}{\lambda_j z_j}} 
+= \frac{|\xi_j|}{|\lambda_j|} \nrm{2}{ \vh_n} 
+= \frac{|\xi_j|}{|\lambda_j|}  |h_{n+1,n}|
+\label{eq:arnoldi_rr_error} 
+\end{equation}
+ for the relative residual-errors of the Ritz-values/vectors.   Ritz-pairs with low associated relative residual norms \eqref{eq:arnoldi_rr_error} are good approximations to eigenvalues/vectors of $\H$ if they are well-conditioned.  This is because \eqref{eq:arnoldi_rr_error} actually indicates that $(\lambda_j,z_j)$ is an exact eigen-pair of the perturbed matrix $\H +\, \mathcal{E}$ where the norm of the perturbation $\nrm{}{\mathcal{E}} = \nrm{}{\vh_n}$. Rearrangement of the Arnoldi relation \eqref{eq:arnoldi_relation} reveals  
+\[
+\H V  - \vh_n e_n^{T} = (\H   - \vh_n v_n^{T}) V = V\Himp. 
+\]
+
+  If an eigenvalue of $\H$ is highly sensitive to perturbation (is badly conditioned) then a low or zero residual-norm    \eqref{eq:arnoldi_rr_error} could be misleading.  We can avoid this situation by noting that the largest eigenvalues of $\H$ converge first.   The relative residual errors are likely to be accurate for Ritz values of largest magnitude, which we expect to converge first.   A very small eigenvalue of $\H$ with small relative-residual error may be suspect.
+
+
+\section{Implicit vs. explicit Ritz-values and vectors}
+\index{Ritz vector/value!implicit, explicit}
+We motivate this discussion by recalling that poles of the URM transfer-function \eqref{eq:tfunc} are eigenvalues of $(\A,\E)$. 
+   
+It should be noted that although every eigenvalue $\lambda$ of $\H = (\A - \sigma \E)^{-1}\E$ corresponds to a  $\mu$ of $(\A,\E)$, and are related by $\lambda = 1 /(\mu-\sigma)$ and share common eigenvectors, the same cannot be said for approximate eigenvalues $\hat{\lambda}$ of $\Himp=V^T \H V$ and $\hat{\mu}$ of $(\A_n, \E_n) = (V^T\A V, V^T \E V)$.   This means there are two different sets of approximate poles implied by the two ROM transfer functions defined in \S\ref{sec:projected_ROMs}.
+
+There are two different sets of approximations to the spectrum of $(\A,\E)$, both implied by projection on to $\krylov{n}{\A}{\RR}$ via basis $V$:
+\paragraph{Implicit Ritz-values}
+The set of implicit Ritz-values
+\begin{equation}
+\Set{1/\hat{\lambda}+\sigma | \hat{\lambda}\in\Lambda(\Himp)}
+\label{eq:set_implicit_ritz}
+\end{equation}
+ of $(\A,\E)$ with respect to $\krylov{n}{\H}{\RR}$ are determined by eigenvalues of the projected operator
+\begin{align*}
+\Himp = V^T \H V &= V^T (\A - \sigma \E)^{-1}\E V,
+\end{align*}
+which is a byproduct of constructing $V$ by $n$ steps of the Arnoldi algorithm.  An implicit Ritz-pair $(\hat{\lambda}, z)$ is said to be converged if its residual-norm 
+$\| \H z - \hat{\lambda} z \|$,
+ which is of the same order as the residual $(\A z - (1/\hat{\lambda}+\sigma) \E)$, is smaller than some tolerance.  
+
+\paragraph{Explicit Ritz-values}
+The set of of explicit Ritz-values
+\begin{equation}
+\Set{\hat{\mu}\in\Lambda(\A_n,\E_n)}
+\label{eq:set_explicit_ritz}
+\end{equation}
+ of $(\A,\E)$ with respect to $\krylov{n}{\H}{\RR}$ where  
+\[
+(\A_n,\E_n)= (V^T \A V, V^T \E V),
+\]
+is not implied by the Arnoldi process and must be computed.  
+
+
+
+ \eqref{eq:set_implicit_ritz} and \eqref{eq:set_explicit_ritz} are not equal in general but are related in that they both converge to the same spectrum $\Lambda(\A,\E)$.  Note that both sets of approximate eigenvalues are dependent on the shift $\sigma$; we expect eigenvalue approximations closer to $\sigma$ to be more accurate for both \eqref{eq:set_implicit_ritz} and \eqref{eq:set_explicit_ritz}, because they both result from projection on to the Krylov-subspace $\krylov{n}{\A}{\RR}$, where $\H=\H(\sigma)$ and $\RR=\RR(\sigma)$.
+
+   The associated approximate eigen-\emph{vectors} are not dependent on $\sigma$.   Only the order in which they converge depends on $\sigma$.  Eigenvectors associated with  \eqref{eq:set_implicit_ritz} and with \eqref{eq:set_explicit_ritz} are not equal in general, but sufficiently converged vectors are nearly equal.
+
+  When converged, implicit  and explicit  eigen-pairs are nearly identical. We consider approximate eigenvalues/vectors coming from explicit and implicit computation to be interchangeable if they are near $\sigma$ and have low relative residual-error norm \eqref{eq:arnoldi_rr_error}.   Thus, if an eigen-pair $(\hat{\lambda}_j,w_j)$ of $\Himp$ is converged, then we can expect that $(\sigma+1/\hat{\lambda}_j,V w_j)$ is a converged eigen-pair of $(\A_n,\E_n)$ with about the same order of error of approximation to an eigen-pair of $(\A,\E)$.  
+
+ The reason we consider both sets of approximate eigenvalues/vectors is that implicit \eqref{eq:set_implicit_ritz} Ritz-values/vectors are far cheaper to compute than the explicit variety \eqref{eq:set_explicit_ritz}, but the explicit formulation \eqref{eq:ds1_expROM} is the end goal of explicit-projection-based MOR.   Un-converged poles of the implicitly projected model transfer-function can and often do have positive real-part, which is unfavorable for ROM applications.  These eigenvalue approximations all move to the left half of the complex plane as they converge to their final resting  values, but as long as there are any implicit Ritz-values $1/\hat{\lambda}+\sigma$ with positive real part, the implicitly projected model \eqref{eq:rm_implicit} is possibly unstable and not attractive for model order-reduction.\footnote{Implicitly projected ROMs, such as those produced by PVL \cite{PVL} often work fine in many practical applications despite being unstable, but they are currently unpopular.}  Implicitly obtained eigen-information is useful feedback to gage and possibly direct progress of an adaptive method.  
+Some MOR methods, typically called \emph{restarted} methods including 
+\cite{grimme1996restart,papakos2003deflated,jaimoukha1997implicitMOR,ahmed2001implicit}, have been developed which attempt to purge subspace  components associated with ``bad'' (destabilizing) or otherwise unwanted eigenvalues from the constructed basis $V$, but they destroy moment-matching properties and introduce other problems.  Explicitly-projected eigenvalues $\hat{\mu}$ of $(\A_n,\E_n)$ are always (for any $n$) well-behaved as long as the projection basis $V$ is real, and as long as  $\krylov{n}{\A(\sigma)}{\RR(\sigma)}\subseteq \spn V$, the explicitly-projected ROM on to $V$ is guaranteed to be of matrix-\pade-type (match moments) with respect to $\sigma$.   
+
+\section{Moment-matching property of Krylov-subspace  projected ROM}\label{sec:moment_matching_proofs}
+\index{moment-matching!of Krylov-subspace  projected ROMs}
+In this section we offer proofs that a reduced-order model implied by orthogonal  projection (via one orthonormal basis $V=\mat{v_1&v_2&\cdots&v_n}$) on to a Krylov-subspace  matches $l$ moments about $\sigma$, where $l$ is the block-degree of the Krylov-subspace  
+\[
+\spn\mat{v_1&v_2&\cdots&v_n} = \krylov{l}{\H}{\RR} 
+= \spn\mat{\RR & \H\RR & \H^2\RR & \cdots & \H^{l-1} \RR}.
+\] 
+ We will show this for implicitly projected ROMs \eqref{eq:rm_implicit} in Theorem~\ref{thm:implicit_ROM_moment_matching}, and explicitly-projected ROMs \eqref{eq:rm_explicit} in Theorem~\ref{thm:explicit_ROM_moment_matching}.   Significant differences in the two ROM approximations are present away from expansion-point(s) $\sigma$, but near $\sigma$ they are approximations of the same order.
+\medskip
+
+Recall the URM (unreduced model) transfer-function $\tf(s)=\CC^T(\A-s \E)^{-1} \BB$ of LTI descriptor system \eqref{eq:ds1}, and its equivalent shift-invert formulation 
+$\tf(s)=\CC^T\left(I-(s-\sigma)\H\right)^{-1}\RR$ with shift $\sigma$, or 
+\begin{align}
+\tf(s+\sigma)&=\CC^T\left(I-s\H\right)^{-1}\RR \label{eq:tfshifted}\\
+&= \sum_{j=0}^\infty s^j \mo{j}\tag{\ref{eq:tfunc_taylor}}
+\end{align}
+        where \eqref{eq:tfunc_taylor} is the Taylor series expansion of $\tf(s)$ about $\sigma\in\C$.  The $j$-th moment $\mo{j}$ was shown in \S\ref{sec:moments} to be
+\begin{equation}
+\mo{j} =\CC^T \H^j \RR.
+\end{equation}
+
+\subsection{Moment matching of the implicitly-projected ROM}
+The implicitly projected ROM transfer-function  
+\begin{equation}
+\tfimp(s+\sigma) =\CC_n^T\left(I-s\Himp\right)^{-1}\rrimp_n
+\label{eq:tfshifted_imp}
+\end{equation}
+is defined via projection of \eqref{eq:tfshifted}, as
+\begin{equation}
+\Himp = V^T \H V, \quad \CC_n = V^T \CC, \quad \rrimp_n = V^T \RR
+\label{eq:imp_projections}
+\end{equation}
+rather than by projecting the system realization $(\A,\E,\BB,\CC)$, hence its specification as the transfer-function for an \emph{implicitly} projected model. Moments of \eqref{eq:tfshifted_imp} about $\sigma$ are given as $\moimp{j} = \CC_n^T \Himp^j_n \rrimp_n$.
+
+\bigskip
+\begin{theorem}
+\label{thm:implicit_ROM_moment_matching}
+Suppose the span of an orthonormal basis $V\in\R^{N\times n}$ contains the Krylov-subspace  $\krylov{l}{\H}{\RR}$ of block-degree $l$ for some $l\leq n$.  Then moments of $\moimp{j}(\sigma)$ of the implicitly projected ROM transfer-function  \eqref{eq:rm_implicit}, \eqref{eq:tfshifted_imp} and moments $\mo{j}(\sigma)$ of the URM transfer-function \eqref{eq:tfunc} about $\sigma$ are related by
+\begin{equation}
+\moimp{j} = \CC_n^T \Himp^j \rrimp_n =  \CC^T \H^j \RR = \mo{j}
+\end{equation}
+for $j=0,1,\ldots,l-1$. 
+\end{theorem}
+
+\begin{proof}
+The theorem follows from left-applying $\CC^T$ to 
+\begin{equation}
+\H^j \RR = V \Himp^j \rrimp_n
+\label{eq:HV}
+\end{equation}
+for $j=0,1,\ldots,l-1$, which we will show by induction.  
+
+For $j=0$, \eqref{eq:HV} follows from \eqref{eq:imp_projections}.  Now assume \eqref{eq:HV} holds for some $j\in \{0,1,\ldots,l-2\}$. Applying $\H$ to \eqref{eq:HV} yields
+\begin{align*}
+\H(\H^j\RR) = \H^{j+1} \RR &= \H (V \Himp^j \rrimp_n) \\
+&= V \Himp \Himp^j \rrimp_n, \quad\text{since } \H V = V \Himp \\
+&=  V \Himp^{j+1} \rrimp_n.
+\end{align*}
+      
+\end{proof}
+
+\subsection{Moment matching of the explicitly-projected ROM}
+ Proof of moment-matching for the explicitly-projected ROM \eqref{eq:ds1_expROM} transfer-function is a little more involved than Theorem~\ref{thm:implicit_ROM_moment_matching} for the implicitly projected model.   It is included as Theorem~\ref{thm:explicit_ROM_moment_matching}.  The proof is adapted from \cite[proposition 6 and theorem 7]{freund2000b}. 
+
+Recall the explicitly-projected ROM \eqref{eq:ds1_expROM} with transfer-function
+\[  
+\tfexp_n(s) = \CC_n^T\left(s\E_n-\A_n\right)^{-1}\BB_n,
+         \tag{\ref{eq:rm_explicit}}
+\]
+where the system realization $(\A,\E,\BB,\CC)$ is said to be \emph{explicitly} projected as 
+\[
+\A_n := V^T \A V, \quad \E_n := V^T \E V, \quad \CC_n := V^T \CC, \quad \BB_n := V^T\BB.
+\]
+
+Moments of the ROM transfer-function \eqref{eq:rm_explicit} are
+\[
+\moexp{j} =\CC_n^T \Hexp^j \rrexp_n, 
+\]
+where the structures
+\begin{equation}
+ \Hexp := (\A_n - \sigma \E_n)^{-1}\E_n\quad\textrm{and}\quad \rrexp_n := (\sigma \E_n-\A_n)^{-1}\BB_n.        
+        \label{eq:explict_ROM_op}
+\end{equation} 
+are analogous  to the shift-invert operator and start-block  
+\begin{equation}
+                        \H := (\A - \sigma \E)^{-1}\E, \quad \RR := (\sigma \E-\A)^{-1}\BB        
+        \tag{\ref{eq:singlematrixdefs}}
+        \end{equation}
+of the unreduced model \eqref{eq:ds1}.
+The proof of Theorem~\ref{thm:implicit_ROM_moment_matching}
+depended on  $\Himp=V^T \H V$, which we do not have for the explicitly-projected ROM.  In general, $\Hexp \neq V^T \H V$.
+However, for an appropriate choice of $F_n$, 
+\[
+\Hexp = V^T F_n V
+\]
+implies that \eqref{eq:rm_explicit} matches $l$ moments.
+
+\bigskip
+\begin{theorem}
+\label{thm:explicit_ROM_moment_matching}
+Suppose the span of an orthonormal basis $V\in\R^{N\times n}$ contains the Krylov-subspace  $\krylov{l}{\H}{\RR}$ of block-degree $l$ for some $l\leq n$, and let 
+\begin{equation}
+F_n :=  V(\A_n-\sigma \E_n)^{-1}V^T \E.
+\label{eq:F_n}
+\end{equation}
+Then for $j\leq l \leq n$, the $j$-th moment  $\moexp{j}$ of the explicitly-projected ROM transfer-function \eqref{eq:rm_explicit} and moment $\mo{j}$ of the unreduced model \eqref{eq:tfunc} are related by
+\begin{align}
+\moexp{j} &= \CC^T F^i_n \RR \quad \text{for}\quad i= 0,1,\ldots \label{eq:rmo_match} \\
+		&= \mo{i} \qquad \text{for}\quad i =0,1,\ldots,j-1.     \label{eq:mo_match}
+\end{align}
+\end{theorem}
+
+\medskip
+\begin{proof}
+First we show \eqref{eq:rmo_match}.
+Since $\spn \H^i \RR\subseteq \krylov{l}{\H}{\RR}$ for $i=0,1,\ldots, j$ and  $\krylov{l}{\H}{\RR} \subseteq \spn V$, for each $i=1,2,\ldots,j$ there is a matrix $X_i$ such that 
+\begin{equation}
+\H^{i-1} \RR = V X_i.  
+\label{eq:HR}
+\end{equation}
+Recall that  $\RR = (\sigma \E - \A)^{-1} \BB$. Then for $i=1$, 
+\[
+\BB = (\sigma \E - \A)\RR = (\sigma \E V - \A V)X_1,
+\]
+which when left-multiplied by $V^T$ results in
+\begin{align*}
+V^T \BB &= V^T(\sigma \E V - \A V)X_1\\ 
+\BB_n &= (\sigma \E_n- \A_n)X_1.
+\end{align*}
+Then
+\begin{equation}
+X_1 = (\sigma \E_n- \A_n)^{-1}\BB_n = \rrexp_n.
+\label{eq:X1}
+\end{equation}
+Right-multiplying \eqref{eq:F_n} with $V$ gives $F_n V =  V(\A_n-\sigma \E_n)^{-1}\E_n = V \Hexp$, and by induction on $i$, 
+\begin{equation}
+F_n^i V =   V \Hexp^i\quad\text{for}\quad i =0,1,\ldots .
+\label{eq:Feqn}
+\end{equation}
+Then moments of the ROM transfer-function 
+\begin{align*}
+\moexp{i} = \CC_n^T \Hexp^i \rrexp_n 
+&= \CC^T V  \Hexp^i \rrexp_n \\
+&= \CC^T (F_n^i V) X_1 \quad \text{by \eqref{eq:X1} and \eqref{eq:Feqn}} \\
+&= \CC^T F_n^i \RR \qquad \text{by \eqref{eq:HR} with } i=1,
+\end{align*}
+which is \eqref{eq:rmo_match}.
+
+Proof of  \eqref{eq:mo_match} is implied by   
+\begin{equation}
+ \H^j \RR = F^j_n \RR \quad \text{for}\quad i=0,1,\ldots,j-1
+\label{eq:proofp2}
+\end{equation}
+ which we show by induction on $i$.  \eqref{eq:proofp2} is trivial for $i=0$.  Now assume \eqref{eq:proofp2} is satisfied for some $i\in\{0,1,j-2\}$. We will show that 
+\[
+F^{i+1}_n \RR = \H^{i+1}\RR
+\]
+as follows:
+\begin{equation}
+\big( (\A-\sigma \E)^{-1}\E \big)  (F_n^i \RR) = \H(\H^i \RR) = \H^{i+1} \RR
+ = V X_{i+2}
+\label{eq:proofp3}
+\end{equation}
+where the rightmost expression follows from \eqref{eq:HR}. 
+Left-multiplying \eqref{eq:proofp3} with $V^T(\A-\sigma \E)$ yields
+\begin{equation}
+(V^T \E)(F_n^i\RR) = (V^T(\A-\sigma \E)V)X_{i+2} = (\A_n - \sigma \E_n)X_{i+2}.
+\label{eq:proofp4}
+\end{equation}
+Then 
+
+
+\begin{align*}
+F_n^{i+1} \RR &= F_n(F_n^i \RR) \\
+&= \bigg( V(\A_n-\sigma \E_n)^{-1}V^T \E \bigg) (F_n^i \RR) \\
+&= V  (\A_n-\sigma \E_n)^{-1} (V^T \E) (F_n^i \RR)\\
+&= V X_{i+2}, \qquad\text{by \eqref{eq:proofp4}}\\
+&= \H^{i+1} \RR, \qquad\text{by \eqref{eq:HR}}
+\end{align*}
+which proves \eqref{eq:proofp2}.   Applying $\CC^T$ yields \eqref{eq:mo_match}, i.e.
+\[
+\moexp{j} = \CC^T F^j_n \RR = \CC^T \H^j \RR = \mo{j}
+\] 
+\end{proof}
+
+
+\chapter{Interpolation-point selection and resulting projection-bases}
+\label{ch:newstuff1}
+
+
+\subsection{Eigenvalue convergence sequence}
+A Krylov-subspace  method iteratively constructs a basis but we often think of the progression in terms of a sequence of converging eigenvalues of $\H$, starting with the largest.   In our case $\H$ is a shift-and-invert operator, so large eigenvalues $\lambda$ of $\H$ are eigenvalues 
+\[
+\mu=\sigma + 1/\lambda
+\]
+ of $(\A,\E)$ which are closest to $\sigma$.   Since eigenvalues $\mu$ of $(\A,\E)$ are poles of the transfer-function $\tf(s)$, we speak of ``poles converging''  as progress towards an accurate ROM.   This is consistent with the notion of a Taylor series giving a better approximation near $\sigma$ with each additional moment. 
+
+  A fundamental feature (and drawback) of Krylov-subspace  methods for model order-reduction is that for a given shift $\sigma$ there is only one way for the method to progress: it is generally from poles $\mu$ closest to $\sigma$ (i.e. smallest $|\mu - \sigma|$), to those farthest away.   This presents a problem because often only a few  dominant poles (\S\ref{sec:pole_dominance}) influence the transfer-function over the segment of interest $i [\omega_0,\omega_1]$ on the $\Im$-axis.  For example, suppose poles $\bm{\mu}_1$ and $\bm{\mu}_2$ are dominant poles but are separated (in distance from $\sigma$) by several insignificant poles,  as in 
+\[
+| \bm{\mu}_1  -\sigma| >| \mu_3 - \sigma| > |\mu_4-\sigma| > \cdots > |\mu_\ell-\sigma| >
+|\bm{\mu}_2-\sigma|. 
+\]
+ Then, using a straightforward Krylov process, after $\bm{\mu}_1$ converges,  $\mu_3,\ldots,\mu_\ell$  must all converge before $\bm{\mu}_2$ does, and all of the associated vector information is added to the projection basis $V$, creating a larger than necessary model.      One way around this is to change the shift $\sigma$ after some number of iterations.    It should also be noted that information about significant transfer-function \emph{zeros} may be included with that of insignificant poles, so convergence of dominant poles is a somewhat dubious indicator of approximate model convergence.  Ideally, both dominant pole and zero information should be considered and at the time of this writing there are no Krylov methods that do this.
+
+
+
+
+\section{Multiple point moment-matching}
+\index{moment-matching!multiple-point}
+Theorems \ref{thm:implicit_ROM_moment_matching} and  \ref{thm:explicit_ROM_moment_matching} can be extended to imply moment-matching about any number of expansion-points  if the projection subspace  contains the appropriate Krylov-subspaces.    Much of the pioneering rational interpolation research, notably the rational-Lanczos method \cite{gallivan1996rational} (and \cite{grimme1997krylovratinterp}) for model order-reduction was done by Grimme in the mid and late 1990s.  It is somewhat based on Ruhe's Rational-Krylov \cite{ruhe1984, ruhe1994rational} eigenvalue method and formalization.   Of particular interest are  \cite{grimme1998rational} and \cite{druskin2011adaptive}, both of which discuss interpolation-point selection.  We refer the reader to those sources for the details of point selection.
+
+\begin{comment}%%%%%%%%%%%%%%%%%%%%%%
+\cite{RAMAO,AORA,lassaux2003model,frangos2008}) are more recent multi-point rational-interpolation methods. Also a Jacobi-Davidson MOR method \cite{jacobiMOR}.   Lee, Chu, and Feng's  RAMAO/AORA method (Rational Arnoldi Method with Adaptive Order selection/ Adaptive-Order Rational-Arnoldi) \cite{RAMAO,AORA} breaths new life into an adaptive point-selection method introduced by \cite{gallivan1996rational}, based on the sequence of ROM \emph{moment-errors} implied by the sequence of candidate-vectors $\vh_k$ of the Arnoldi process \S\ref{sec:arnoldi}.
+\end{comment}%%%%%%%%%%%%%%%%%%%%%%%
+
+   Suppose that for each $j = 1,2,\ldots,\np$ the Krylov-subspace 
+\[ 
+\K_j=\krylov{n_j}{\H_j}{\RR_j} = \spn\mat{\RR_j & \H_j \RR_j & \H_j^2 \RR_j & \cdots & \H_j^{\eta_j-1} \RR_j}
+\]
+ of dimension $n_j$ (and block-degree $\eta_j$), induced by 
+\[
+ \H_j := \H(\sigma_j)=(\A-\sigma_j \E)^{-1}\E \quad \text{and} \quad 
+ \RR_j := \RR(\sigma_j) = (\sigma_j \E - \A)^{-1}\BB
+\]
+is contained in the span of $V$, so that
+\begin{equation}
+\K_1 \cup \K_2 \cup \cdots \cup \K_\np \subseteq \spn V
+\label{eq:multiV} 
+\end{equation}
+Then the ROM implied by orthogonal projection on to  $\spn V$ matches $l_j$ moments about interpolation-point $\sigma_j$ for each $j=1,2,\ldots,\np$.
+
+
+
+
+\subsection{Merging bases}
+There are several ways to produce a basis for the composite space \eqref{eq:multiV}.  The naive method suggested by our previous discussion of single-point Krylov methods is to use $\np$ consecutive runs of a basic Krylov method like Algorithm~\ref{alg:arnoldi} (Arnoldi), each producing an orthonormal basis $V_j$ for which 
+\[
+\spn V_j = \K_j,
+\]
+and then somehow putting the bases together into $V = \mat{v_1&v_2&\cdots&v_n}$, where 
+\begin{equation}
+\spn  \mat{v_1&v_2&\cdots&v_n} = \spn V_1 \cup \spn V_2 \cup \cdots \cup \spn V_\np.
+\label{eq:multiV2}
+\end{equation}
+
+
+   For the general application of rational-interpolation we assume that complex interpolation-points are used.  As will be discussed in \S\ref{sec:complex_points} we are typically required to split the basis vectors into $\Re$ and $\Im$  parts.   For this reason it is not necessary for the individual bases $V_j$ to be orthogonal to one-another, or even linearly-independent.  However, an $\H_j$-invariant-subspace  $\Y$ contained  in $\K_j$ is also $(\A,\E)$-invariant and thus has global significance. 
+
+The naive approach of producing bases for $\K_j$ separately and combining them in a post-processing step is inefficient because there is a significant degree of overlap between spaces.    Recall that an invariant-subspace  under $\H(\sigma)$ is independent of the expansion-point (shift) $\sigma$.  Suppose $\H_1 = \H(\sigma_1)$  and $\H_2=\H(\sigma_2)$.  Then an invariant-subspace  $\Y\subset \spn V_1$ under $\H_1$ is also invariant under $\H_2$.
+ 
+ It would be wasteful to spend computational effort re-discovering $(\A,\E)$-invariant-subspace  while computing a basis for $\K_j$, if we already discovered it while constructing the basis $V_{j-1}$ for  $\K_{j-1}$. Traditional rational-interpolation methods for MOR such as rational-Lanczos \cite{gallivan1996rational} avoid this issue by doing full, Arnoldi-style orthogonalization of an iterate against every previous vector, generating one orthogonal basis $V$ for \eqref{eq:multiV2}.  For complex-valued interpolation-points we will have to split the basis \eqref{eq:multiV2} anyway, thus losing any orthogonality.
+
+
+
+
+\subsection{Interpolation-point translation}\label{sec:subspace _translation}
+Suppose we have an approximate eigen-pair $(\lambda,z)$ of $\H_1=\H(\sigma_1)$ so that 
+\[
+\H_1 z = \lambda z + r
+\]
+and we would like to know its residual under another member $\H_2=\H(\sigma_2)$ of the shift-invert operator family 
+\begin{equation}
+\bigg\{\H(\sigma) = (\A-\sigma \E)^{-1}\E \bigg\}.
+\label{eq:op_family}
+\end{equation}
+Then
+\begin{equation}
+\H_2 z = T \H_1 z  = \lambda T z +  T r,
+\label{eq:ritz_transform_1}
+\end{equation}
+where $T$ is the transformation 
+\begin{align}
+T(\sigma_1,\sigma_2) &:= (\A-\sigma_2 \E)^{-1}(\A-\sigma_1 \E)\nonumber\\
+&\ = (\sigma_2-\sigma_1) \H_2 + I.
+\label{eq:rational_translation}
+\end{align}
+
+
+Note that  $T \H_1 = \H_2$ and $T \RR_1 = \RR_2$.
+
+
+\begin{proof}[Proof of \eqref{eq:rational_translation}]
+The expression \eqref{eq:rational_translation} comes from observing that
+\[
+\tilde{v} = T v = (\A-\sigma_2 \E)^{-1}(\A-\sigma_1 \E)v, 
+\]
+\begin{align*}
+(\A-\sigma_2 \E)\vt &= (\A-\sigma_1 \E)v \\
+\A \tilde{v}- \sigma_2 \E \tilde{v} &= \A v - \sigma \E v \\
+\A(\tilde{v}-v) -\sigma_2\E(\tilde{v}-v) &= (\sigma_2-\sigma_1)\E v \\
+\tilde{v}-v &=  (\sigma_2-\sigma_1) (\A-\sigma_2 \E)^{-1}\E v \\
+&=  (\sigma_2-\sigma_1)\H_2 v.
+\end{align*}
+\end{proof}
+
+The translation transformation \eqref{eq:rational_translation} must be invertible, with 
+\begin{equation}
+\big( T(\sigma_1,\sigma_2)\big)^{-1} = T(\sigma_2,\sigma_1) = (\sigma_1-\sigma_2) \H_1 + I.
+\label{eq:inverse_rational_translation}
+\end{equation}
+
+For easier notation let $\Delta=\sigma_2-\sigma_1$, so that $T=T(\sigma_1,\sigma_2)=\Delta \H_2 + I$ and $T^{-1}=-\Delta \H_1 + I$. Then \eqref{eq:rational_translation} and \eqref{eq:inverse_rational_translation} imply that 
+\[
+(\Delta \H_2 + I)(-\Delta \H_1 + I) = (-\Delta \H_1 + I) (\Delta \H_2 + I)=I,
+\]
+from which it follows that
+\begin{equation}
+ \H_2 \H_1 = \frac{\H_2 - \H_1}{\sigma_2 - \sigma_1}
+\label{eq:Hdiff}
+\end{equation}
+and for $\sigma_2\neq\sigma_1$,
+\begin{equation}
+\H_1 \H_2 = \H_2 \H_1.
+\label{eq:Hcommute}
+\end{equation}
+\eqref{eq:Hcommute} shows that the set \eqref{eq:op_family} of operators, commutes.   \eqref{eq:Hdiff} implies that 
+\[
+\frac{d}{d\sigma} \H(\sigma)=\left(\H(\sigma)\right)^2.
+\]
+
+It might interest the reader to observe that the shift-invert transfer-function representation
+\begin{equation}
+\tf(s) = \CC^T\big(I - (s-\sigma) \H(\sigma)\big)^{-1}\RR(\sigma),
+\label{eq:tfsig}
+\end{equation}
+defined about the interpolation-point $\sigma$ but independent of $\sigma$, involves a transformation of the form \eqref{eq:rational_translation}, since 
+\[
+I - (s-\sigma) \H = (\sigma - s)\H + I=T(s,\sigma).
+\]
+
+Then we may re-write \eqref{eq:tfsig} as
+\begin{align*}
+\tf(s) &= \CC^T T(\sigma,s)\RR(\sigma) \\
+&= \CC^T \RR(s)\\
+&= \CC^T (\A- s \E)^{-1} \BB.
+\end{align*}
+
+Now back to Ritz-residual translation.   Recall from \eqref{eq:ritz_transform_1} that for eigen-pair $(\lambda,z)$ of $\H_1$ we have 
+\[
+\H_2 z = T \H_1 z  = \lambda T z +  T r
+\]
+ with the translation $T=T(\sigma_1,\sigma_2)=\Delta \H_2+I$  from \eqref{eq:rational_translation} and $\Delta = \sigma_2 - \sigma_1$.
+
+Then 
+\begin{align*}
+\H_2 z &= \lambda (\Delta \H_2 + I)z + Tr\\
+&= \lambda z + \lambda \Delta \H_2 z +T r, 
+\label{eq:Rtiz_resid_translation}
+\end{align*}
+so
+\begin{equation}
+(1-\lambda \Delta)\H_2 z  = \lambda z + T r.
+\end{equation}
+
+Define the scaling factor 
+\[
+\zeta := \frac{1}{1-\lambda \Delta} =  \frac{\mu-\sigma_1}{\mu-\sigma_2}
+\]
+where $\mu=1/\lambda+\sigma_1$ is the approximate eigenvalue of $(\A,\E)$ associated with $\lambda$. 
+Then 
+\begin{align}
+\H_2 z - (\zeta\lambda) z &=  \zeta T r \nonumber\\
+&= \zeta (\Delta\H_2 + I) r
+\label{eq:new_residual}
+\end{align}
+
+
+
+\section{Complex expansion-points}\label{sec:complex_points}
+ If a shift $\sigma_j\in\C$ is not strictly-real  then the basis $V_j\in \C^{N\times n_j}$ of its associated Krylov-subspace  is also complex. 
+Although Grimme discusses interpolation point selection in some depth in \cite{grimme1998rational},    properties of a ROM obtained via projection with a complex basis have not been fully explored. They are generally avoided in part due to the extra computation and storage required for complex arithmetic.   
+
+ It should be noted however that using $\sigma\in\R$ is only half as efficient as it appears to be and $\sigma\in\C$ with $\Re(\sigma)\neq 0$ is potentially twice as efficient as it appears.  That is because the system pencil $(\A,\E)$ is real and its complex eigenvalues are conjugate pairs.  If $\sigma \in\R$, eigenvalues of $\H=(\A-\sigma \E)^{-1}E$ must converge pairwise, so each conjugate-pair of converged vectors provide only one piece of complex spectral information.   Eigenvalues of $\H$ for complex $\sigma$ do not converge in pairs, but each converged eigenvalue $\lambda$ implies that the pole $\mu = \sigma+ 1/\lambda$ \emph{and} its conjugate $\conj{\mu}$ is converged.   For reasons discussed next we generally split a complex basis into $\Re$ and $\Im$ parts, so there is not as much difference between using a real and general complex interpolation-point as there seems.
+
+
+Real bases are preferred because the system \eqref{eq:ds1} realization $(\A,\E,\BB,\CC)$ consists of real matrices; explicit-projection with a real basis yields a ROM characterized by $(\A_n, \E_n, \BB_n, \CC_n)$ which is also real and thus retains desired properties of the original model.  One such property is symmetry of the transfer-function about the $\Re$-axis.
+
+
+   The typical procedure to obtain a real basis for a complex Krylov-subspace  is to split the $n$ vector basis $V$ into $2n$ real vectors  $\rp{v}{j} = \Re(v_j)$ and $\ip{v}{j} = \Im(v_j)$, forming the so-called split-basis $V^*\in\R^{N\times 2n}$, which  spans the so-called  \emph{split-subspace}\footnote{this procedure is not novel, although only in this text do we call the resulting space a ``split'' subspace.}
+\index{split-space}
+\begin{equation}
+\begin{aligned}
+\spn&\mat{\rp{v}{1} & \ip{v}{1} & \rp{v}{2} & \ip{v}{2} & \cdots &  \rp{v}{n} & \ip{v}{n} }\\ 
+&= \spn \krylov{\eta}{\H}{\RR} \cup  \krylov{\eta}{\conj{\H}}{\conj{\RR}}\\
+&= \spn \krylov{\eta}{\H(\sigma)}{\RR(\sigma)} \cup  \krylov{\eta}{\H(\conj{\sigma})}{\RR(\conj{\sigma})}\\
+&= \krylov{\eta}{\H}{\RR}^*
+\end{aligned}
+\label{eq:split_space}
+\end{equation}
+of dimension $\nsplit \leq 2n$.
+   The basis for a standard Krylov-subspace  may have complex vectors but its span is generally considered over $\R$.  The split complex Krylov-subspace  admits a real basis but its span is over $\C$, so it should still be considered a complex space that contains $\krylov{\eta}{\H}{\RR}$.
+
+Notice that the split Krylov-subspace  \eqref{eq:split_space} is the union of two Krylov-subspaces  with complex conjugate shifts $\sigma$ and $\conj{\sigma}$ so we may consider a complex shift to be two shifts.  Saad calls this idea ``double-shifting'' in \cite{complex_strategies}, where it was first given significant analysis.  Matching moments about a conjugate pair of points $\sigma$ and $\conj{\sigma}$ is not is not advantageous so much as an unavoidable effect of requiring a real basis.   Indeed, convergence of an eigenvalue $\mu\in\C$ of $(\A,\E)$ with associated vector $z$ is equivalent to convergence of the eigen-pair $(\conj{\mu},\conj{z})$ of $(\A,\E)$ as well.  It would seem that the basis and the resulting ROM are potentially twice as large.   This is true in theory, but in practice a complex quantity $z = \alpha + i\beta \in \C$ is represented by two real quantities $\alpha, \beta\in \R$ anyway.   A complex ROM realization of order $n$ is deceptively small because of the complex quantities involved.  We avoid this ambiguity by always referring to the model size $n$ as the number of vectors of the real projection basis $V$.
+
+
+ \subsection{Producing a real basis for a complex Krylov-subspace }\label{sec:eqreal}
+ If we use a shift $\sigma$ with nonzero $\Im$ part but use real basis for projection, we have no choice but to project on to a split-Krylov space of the form \eqref{eq:split_space}.   One way to do that is to perform a run of the Arnoldi process (algorithm \ref{alg:arnoldi}) in complex arithmetic with matrices $\H(\sigma)$ and $\RR(\sigma)$, yielding the  complex orthogonal basis $V = \mat{v_1 & v_2 & \cdots & v_n}$ and then split $V$ into $\Re$ and $\Im$, such as
+\begin{equation}
+\mat{\rp{v}{1} & \ip{v}{1} & \rp{v}{2} & \ip{v}{1} & \cdots &  \rp{v}{n} & \ip{v}{n} }.
+\label{eq:split_set}
+\end{equation}
+But the set \eqref{eq:split_set} is no longer orthogonal, and possibly linearly dependent.  Orthogonalization of \eqref{eq:split_set} requires up to  $(2n)^2 N$ flops.
+
+
+\subsubsection{Ruhe's method}
+It seems that it  would be ideal to create an orthogonal, real basis for \eqref{eq:split_space} directly during the iterative process.   Ruhe addresses this in \cite{ruhe1994rational}, in the context of a single-vector general rational-Krylov method for eigenvalue finding.  His method involves considering $\Re$ and $\Im$ parts of the power iterate separately, so that each iteration yields two new real vectors.  Implemented as a modification of the Arnoldi algorithm, line~\ref{Arnoldi_mult} of Algorithm~\ref{alg:arnoldi} becomes
+\[ 
+a_k + i b_k = \H v_k,  
+\]
+and we orthogonalize vectors $a_k$ and $b_k$ separately.
+However,  it is not clear what vector we should iterate with next in order to build a basis for \eqref{eq:split_space}.   It is not clear whether the real basis produced by Ruhe's method spans a Krylov-subspace, let alone a basis for the split-Krylov-subspace  \eqref{eq:split_space}, nor whether projection with this basis matches moments.  Surprisingly there is neither much literature nor results on this topic with regards to model order-reduction, but further work in this area could be promising, as the typical split and re-orthogonalize procedure seems redundant.
+
+
+
+\subsection{Using a real inner-product}\label{sec:eqreal}
+\index{equivalent real forms}
+\index{realification}
+Let us assume that we work strictly in complex arithmetic followed by splitting the complex basis into $\Re$ and $\Im$ parts and re-orthogonalizing as a post-processing step.    One way to cut complex-vector orthogonalization costs in half for a Gram-Schmidt based process during the the Krylov process is to use the alternate  real-valued  inner-product that we denote by $\ipr{\cdot}{\cdot}_\R$.  
+
+For complex vectors $v=a+i b$ and  $w=x+i y$,  define
+\begin{equation}
+  	\ipr{v}{w}_\R = x^T a - y^T b \in \R.
+\label{eq:split_ip}
+\end{equation}
+Consider ``orthogonalization'' using \eqref{eq:split_ip} instead of the standard complex Euclidean inner-product 
+\begin{equation}
+	\c{v} w = (x^T a - y^T b) + i(x^T b + y^T a).
+\label{eq:eucl_ip}
+\end{equation}
+
+The real inner-product  \eqref{eq:split_ip} is cheaper to compute than \eqref{eq:eucl_ip}.   The basis $V$ produced by a cycle of the Arnoldi process (algorithm~\ref{alg:arnoldi}) using this inner-product for orthogonalization is not real-valued, nor is it orthogonal in the Euclidean sense.  We cannot use it to make orthogonal projections as in \eqref{eq:exp_projections}, and an $n$-dimensional basis $V$ orthogonal with respect to \eqref{eq:split_ip} does not span $\krylov{n}{\H}{\RR}$, in general.  However, it satisfies \eqref{eq:split_space}; that is, 
+\[
+\spn V^* = \krylov{n}{\H}{\RR}^* =  \spn \krylov{n}{\H(\sigma)}{\RR(\sigma)} \cup  \krylov{n}{\H(\conj{\sigma})}{\RR(\conj{\sigma})},
+\]
+which works out because we must split and re-orthogonalize anyway. 
+
+Constructing such an equivalent-real orthogonal basis for  $\krylov{n}{\H}{\RR}$ can be accomplished  
+by replacing line~\ref{Arnoldi_ortho1_5}
+\[
+h_{jk} = \c{v_k}r_k
+\]
+ in algorithm~\ref{alg:arnoldi} with 
+\[
+g_{jk} = \ipr{v_k}{r_k}_\R
+\]
+where $\ipr{\cdot}{\cdot}$ is defined by \eqref{eq:split_ip}.
+
+However, the matrix 
+\begin{equation}
+\Heqimp= [g_{jk}] \neq \c{V} \H V
+\label{eq:Gmat} 
+\end{equation}
+of orthogonalization coefficients is no longer an orthogonal-projection in the Euclidean sense which limits this idea's utility for model order-reduction. 
+
+
+   
+\section{Equivalent-real formulations} \label{sec:eqreal_discussion}
+A Krylov process that orthogonalizes iterates with respect to \eqref{eq:split_ip} is effective for constructing a split-worthy basis because it is an Euclidean inner-product with respect to the ``equivalent-real'' Krylov-subspace $\krylov{n}{\Heq}{\Req}\subset\R^{2N}$ induced by  the
+\emph{equivalent-real}, or \emph{realified} formulations 
+ \begin{equation}
+ \Heq = \mat{\rp{\H}{} & -\ip{\H}{}\\ \ip{\H}{} & \rp{\H}{} }
+ \quad\text{and}\quad \Req = \mat{\rp{\RR}{}\\\ip{\RR}{}}.
+ \label{eq:equiv_real}
+ \end{equation}
+of $\H=\rp{\H}{} + i\ip{\H}{}$ and $\RR=\rp{\RR}{}+i\ip{\RR}{}$  from \eqref{eq:singlematrixdefs}.
+This idea is from \cite[Sec. 5]{complex_strategies} and \cite[`$K1$-formulation']{day_heroux}. There is a general definition and discussion of realified spaces as a pure-mathematics topic in \cite{palmer2001banach}. 
+
+ A basis
+ \begin{equation}
+ \Veq = \mat{\veq_1&\veq_2&\cdots&\veq_n}
+ \label{eq:equiv_real_basis}
+ \end{equation}
+
+ for  the Krylov-subspace  $\krylov{n}{\Heq}{\Req}$ induced by the realified matrices \eqref{eq:equiv_real} consists of  vectors
+\[  
+\veq = \mat{ \tp{\veq}{} \\ \bt{\veq}{} }
+\]
+where we call $\tp{\veq}{}$ and $\bt{\veq}{}$ in $\R^N$ the \emph{top} and \emph{bottom} parts of $\veq$.
+ We define a split of the equivalent-real basis \eqref{eq:equiv_real_basis} as
+ \begin{equation}
+ \Veq_n^* : = \mat{\tp{\veq}{1} & \bt{\veq}{1} & \tp{\veq}{2} & \bt{\veq}{2}
+	 & \cdots & \tp{\veq}{n} & \bt{\veq}{n} },
+ \label{eq:split2}
+ \end{equation}
+which is analogous to the split \eqref{eq:split_space} of set of complex vectors into $\Re$ and $\Im$-parts. 
+
+The next result establishes that  
+\[
+\spn{\Veq_n^*} = \krylov{n}{\H}{\RR}^*.
+\]
+That is, whether we construct a basis for a complex Krylov-subspace  $\krylov{\eta}{\H}{\RR}$ using complex arithmetic, or using real arithmetic with equivalent real forms $\Heq$ and $\Req$, splitting the basis yields the same spanning set.  
+
+Note  that equivalent-real forms never need to be explicitly formed. They are implied by the use of the real inner-product \eqref{eq:split_ip} on complex vectors. 
+
+\subsection{Equivalence of split complex and equivalent-real subspaces}
+\label{sec:equivbases}
+\begin{lemma}\label{lem:equal_system_moments}
+Consider the equivalent-real formulations $\Heq$ and $\Req$ of $\H$ and $\RR$ as defined by \eqref{eq:equiv_real}.  
+Then equivalent real formulation of $\H^j \RR$ is $\Heq^j \Req$ for any integer $j=0,1,2,\ldots$, i.e.
+\begin{equation}
+   (\H^j \RR)^* =   \Heq^j \Req.
+\label{eq:equal_system_moments}
+\end{equation}
+Equivalently,
+\begin{equation}
+\Heq^j \Req = \mat{\Re(\H^j \RR) \\ \Im(\H^j \RR)}.
+\tag{\ref{eq:equal_system_moments}*}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Trivially for $j=0$ we have $\Req := \mat{\rp{\RR}{} & \ip{\RR}{}}^T$.
+For $j\geq 1$, let $K = \H^{j-1} R$. Then $\Keq = \mat{\rp{K}{}& \ip{K}{}}^T$
+is the equivalent-real form of $K = \rp{K}{} + i \ip{K}{}$, so
+ \begin{equation*}
+ \Heq^j \Req  = \Heq\Keq = \mat{\rp{\H}{} & -\ip{\H}{}\\ \ip{\H}{} & \rp{\H}{}} \mat{\rp{K}{} \\ \ip{K}{}}
+ = \mat{\rp{\H}{} \rp{K}{} - \ip{\H}{} \ip{K}{} \\ \rp{\H}{}\ip{K}{} + \ip{\H}{}\rp{K}{} }
+ \end{equation*}
+is the equivalent real formulation of
+
+\begin{align*}
+\H^j R = \H K &= (\rp{\H}{} + i \ip{\H}{})(\rp{K}{} + i\ip{K}{})\\
+ &= \left( \rp{\H}{}\rp{K}{} - \ip{\H}{}\ip{K}{} \right) +
+	i\left(\rp{\H}{}\ip{K}{} + \ip{\H}{}\rp{K}{}  \right)
+\end{align*}
+\end{proof}
+
+
+It follows as a corollary that the split-Krylov-subspaces  \eqref{eq:split_space} and \eqref{eq:split2}  induced by each pair, are equal.
+\begin{equation}
+	   	\krylov{n}{\Heq}{\Req}^* = \krylov{n}{\H}{\RR}^*
+\label{eq:split_bases_equiv}
+\end{equation}
+
+
+
+The inner-products \eqref{eq:eucl_ip} and \eqref{eq:split_ip} yield
+different notions of orthogonality of a complex basis
+and its equivalent-real counterpart, and ultimately incompatible spaces.  The inner-product
+\eqref{eq:split_ip} implies a weaker orthogonality than \eqref{eq:eucl_ip}:
+if two complex vectors $v,w\in\C^N$ are orthogonal then it follows that their
+equivalent real forms $\vh,\hat{w}\in\R^{2N}$ are also orthogonal, but the converse
+is not true in general.
+A basis $\Veq$ of the block-Krylov-subspace  $\krylov{n}{\Heq}{\Req}$ cannot be
+identified with a basis of $\krylov{n}{\H}{\RR}$:  if
+we express each basis vector $\veq_j$ as a complex vector
+\[
+v_j = \tp{\veq}{j} + i\bt{\veq}{j},
+\]
+the resulting set of complex vectors $\{v_j\}$ will generally neither be orthogonal,
+nor will it span $\krylov{n}{\H}{\RR}$.  However, we are not interested
+in $\krylov{n}{\H}{\RR}$, but rather its split variation $\krylov{n}{\H}{\RR}^*$,
+which is why the result \eqref{eq:split_bases_equiv} of Lemma~\ref{eq:equal_system_moments} is promising.
+
+The norms implied by \eqref{eq:eucl_ip} and \eqref{eq:split_ip}  for a complex vector $v\in\C^N$ and its equivalent real form $\veq\in\R^{2N}$ are equal:
+\begin{equation}
+\nrm{2}{\veq}^2 = \veq^T \veq  = \c{v}v =  \ipr{v}{v} = \nrm{2}{v}^2 .
+\label{eq:equiv_norms}
+\end{equation}
+
+
+Lemma~\ref{lem:equal_system_moments} establishes that complex and realified forms of $\H$ and $\RR$ run for equal  numbers of iterations induce the same split Krylov-subspace  $\krylov{n}{\H}{\RR}^*$.  The next result establishes that the basis vectors produced by an iteration
+of the Arnoldi process advance the split-Krylov-subspace \eqref{eq:split_space} in the same order, regardless of whether we use complex or equivalent-real formulation (i.e. complex formulation with inner-product \eqref{eq:split_ip}).
+
+We show this for the simpler case that $\RR=\Rr\in\C^N$ is a single vector.  The result of Theorem~\ref{thm:eqbases} can be extended to the more general \emph{Band}-Krylov process which is applicable to MIMO model reduction. 
+
+\medskip
+\begin{theorem} \label{thm:eqbases}Consider $\H$, $\Rr$ from \eqref{eq:singlematrixdefs} and their realified formulations $\Heq$ and $\req$ defined by \eqref{eq:equiv_real}.  Let
+$V=\mat{v_1&v_2&\cdots&v_n}$ be the orthonormal basis implied by $n$ Arnoldi iterations of $\H$ with start vector $\Rr$, and let $\Veq= \mat{\veq_1&\veq_2&\cdots&\veq_n}$, with $\veq_j = \mat{\tp{\veq}{j}& \bt{\veq}{j}}^T$, be the analogous vectors produced by Arnoldi iterations using $\Heq$ and $\req$.
+Then there exist scalars $\alpha, \beta\in\R$ and real vectors $w,z\in \krylov{n}{\H}{\Rr}^*$ such that
+	\begin{equation}
+	   	\Re(v_n) = \alpha\tp{\veq}{n} + w \qquad\text{and }\qquad
+		 \Im(v_n) = \beta\bt{\veq}{n} + z.
+     \label{eq:equ_bases}
+	\end{equation}
+\end{theorem}
+
+\medskip
+\begin{proof}
+We will prove \eqref{eq:equ_bases} by induction.
+For $n=1$ we have $v_1 = \Rr/\nrm{2}{\Rr}$, $\veq_1 = \req / \nrm{2}{\req}$, where $\nrm{2}{\req}=\nrm{2}{\Rr}$ by  \eqref{eq:equiv_norms}, so $\Re(v_1) = \tp{\veq}{1}$ and
+$\Im(v_1) = \bt{\veq}{1}$, trivially satisfying \eqref{eq:equ_bases}.
+   
+Now assume we have performed $n\geq 1$ steps of the standard Arnoldi process to obtain an orthonormal basis $V$ for $\krylov{n}{\H}{\Rr}$, and assume a complex span for its split space $\krylov{n}{\H}{\Rr}^*$ (of dimension $n$), so that 
+\begin{equation}
+\krylov{n}{\H}{\Rr} \subseteq \krylov{n}{\H}{\Rr}^*=\spn\mat{\vt_1 & \vt_2&\cdots&\vt_\nsplit}
+\label{eq:split_incl2}
+\end{equation}
+for real basis vectors $\vt_j\in\R^N$.
+On the $n\geq 1$-th step,  the Arnoldi process with $\H$ and $\Rr$ computes scalar orthogonalization coefficients $\{h_{jn}\}_{j=1}^n\subset\C$  and $h_{n+1,n}\in\R$ such that 
+	\begin{align}
+	h_{n+1,n}v_{n+1} &= \H v_{n} - \sum_{j=1}^{n} h_{jn} v_j \nonumber\\
+	 &= \H^{n}\Rr + \sum_{j=1}^{n} c_j v_j, \qquad  c_j\in\R \nonumber\\
+	 &= \H^{n}\Rr + \sum_{j=1}^{\nsplit} d_j\vt_j, \qquad d_j\in\C,\quad \text{by \eqref{eq:split_incl2}} \nonumber\\
+	 &= \H^{n}\Rr + w_1 + iz_1, \qquad w_1,z_1\in\krylov{n}{\H}{\Rr}^* \cap \R^N.
+\label{eq:pf2}
+	\end{align}
+Lemma~\ref{lem:equal_system_moments} implies that we can re-write \eqref{eq:pf2} in realified form as
+\begin{equation}
+h_{n+1,n}\mat{\Re(v_{n+1})\\ \Im(v_{n+1})} = \Heq^{n}\req + \mat{w_1\\z_1}.
+\label{eq:cplx_prog}
+\end{equation}
+
+On the other hand, after $n$ iterations Arnoldi iterations with $\Heq$ and $\req$ we have
+\[
+\heq_{n+1,n}\veq_{n+1} = \Heq^{n}\req - \sum_{j=1}^{n} \hat{h}_{jn}\veq_j,
+\]
+so
+\begin{align*}
+\heq_{n+1,n}\mat{\tp{\veq}{n+1}\\ \bt{\veq}{n+1}}
+ &= \Heq^{n}\req + \sum_{j=1}^{n} \hat{c}_j\mat{\tp{\veq}{j}\\\bt{\veq}{j}}, \qquad \hat{c}_j\in\R  \\
+&= \Heq^{n}\req + \sum_{j=1}^{\nsplit} \mat{\hat{a}_j\vt_j \\ \hat{b}_j\vt_j},
+\qquad \hat{a}_j,\hat{b}_j \in\R\\
+&= \Heq^{n}\req + \mat{w_2 \\ z_2},
+\label{eq:eqreal_prog}
+\end{align*}
+where $w_2,z_2\in\krylov{n}{\H}{\Rr}^* \cap \R^N$.
+\end{proof}
+
+Theorem~\ref{thm:eqbases} establishes that Arnoldi vectors generated using $\Heq$ and $\req$
+yield basis vectors for $\krylov{n}{\H}{\Rr}^*$ in the same order as those obtained from $\H$ and $\Rr$;
+in fact, up to finite precision error they yield exactly the same basis.
+
+\subsection{Reduced-order models via equivalent-real formulations}
+\subsubsection{via explicit projection}
+We showed in Theorem~\ref{thm:eqbases} that splitting a complex basis that is orthogonal with respect to the real inner-product \eqref{eq:split_ip} yields the same spanning-set as if we had used the standard complex Euclidean inner-product \eqref{eq:eucl_ip}.  Then the explicitly-projected ROM \eqref{eq:ds1_expROM} using a basis \eqref{eq:split_space} for the split-Krylov-subspace  $\krylov{\eta}{\H}{\RR}^*$  is the same regardless of which of those inner-products we use. 
+
+\subsubsection{via implicit projection}
+  The matrix $\Heqimp$ of orthogonalization coefficients from the equivalent-real Arnoldi process, \eqref{eq:Gmat}, is a Rayleigh-quotient approximation to the equivalent-real operator
+\[
+\Heq = \mat{\rp{\H}{} & -\ip{\H}{}\\ \ip{\H}{} & \rp{\H}{} } 
+\]
+ of \eqref{eq:equiv_real}, and not the original complex-shifted operator $\H$.   It is the projection 
+\[
+\Heqimp = \Veq^T \Heq \Veq
+\]
+that would be formed by orthogonal projection using $\Veq\in\R^{2N \times \eta}$, where $\spn \Veq = \krylov{n}{\Heq}{\Req}$ for the implied Krylov-subspace   induced by equivalent-real forms \eqref{eq:equiv_real}.  Thus, an implicitly projected ROM \eqref{eq:rm_implicit} is not so simple to characterize.  For example, it is known that the spectrum 
+\[
+\Lambda(\Heq) = \Lambda(\H) \cup \Lambda(\conj{\H})
+\]
+of $\Heq$ contains spectral information for the complex-conjugate $\conj{\H}$ which complicates matters because  we are interested only in the spectrum of $\H$.  This makes analyzing a ROM transfer-function via implicit-projection onto a realified Krylov-subspace  non-trivial, but it might be a promising improvement if developed further.
+
+
+
+
+\chapter{The band-Arnoldi process and a proposed thick-restarted variant}
+\label{ch:newstuff2}
+``Thick''-starting a Krylov-process that iterates with $\H$ starting on $\RR$ means that we  instead start on $\mat{Z & \RR}$ where $Z$ is a basis of known Ritz-vectors of $\H$.  The notion of a re-start for multi-point MOR is that once we have iterated enough with $\H_1= \H(\sigma_1)$ on $\RR_1=\RR(\sigma_1)$, creating a ROM approximation about $\sigma_1$, we can start over, iterating about $\sigma_2$ with $\H_2$ and $\RR_2$, avoiding wasting computation on rediscovering invariant-subspace.   Recall that all $\H(\sigma)$ (over $\sigma$ at which $\H(\sigma)$ is defined) share invariant-subspaces.    If we determine a convergent-enough invariant-subspace  $Y_1$ of $\H_1$, then we can thick-restart the process with $\H_2$ acting on $\mat{Y_1 & \RR_2}$. 
+
+First we will introduce the Band-Arnoldi algorithm and formalism that facilitate a multiple-vector iteration, since 
+our start block $\RR= \mat{\Rr_1&\Rr_2&\cdots&\Rr_\nin}$ contains $\nin$ vectors for a general (MIMO) model.    
+
+The thesis of this document is a thick-restarted Arnoldi-type algorithm for multiple-interpolation-point MOR (rational-interpolation), where the model to be reduced is assumed to be MIMO.    An advantage to our method over previous attempts at a restarted MOR method that assume the standard single-vector formalism is that we are not forced to choose between re-starting with a proper ``start'' vector or block $\RR$ (preserving moment matching), a combination of Ritz-vectors, or the left-over candidate vector from the previous cycle:  we can restart with any number of vectors, or all of them.    We can start with an arbitrary set of vectors in addition to $\RR$.    For simplicity we will assume the additional vectors are Ritz-vectors, but that is by no means required.    
+
+To the best of our knowledge this is the first restarted Krylov-subspace for MIMO model reduction that uses the band-Arnoldi process, rather than a block process.  It appears that the implicitly-restarted method \cite{band_IRA} for finding eigenvalues restarts band-Arnoldi process in a similar way, but not for model reduction.
+
+\section{Band-Arnoldi algorithm}
+ Band-Arnoldi process of \cite{AN} is included here as algorithm~\ref{alg:barnoldi}.   An older (possibly the original) version of a band-Krylov process was given by \cite{ruhe1979bLanczos} in 1979. The band-type iteration is considered less efficient than a  block method like the block-Arnoldi of  \cite{lehoucq1997block}, because it is a single-vector iteration that advances the space with one matrix-vector product at a time.  A block method can take advantage of very efficient algorithms for matrix-matrix products.    However, block methods suffer with the changing block-size resulting from deflation of linear-dependence within the iterating band.  Deflation and changing block-dimension are an essential part of our method so the band-iteration is more fitting.          
+
+Band-Arnoldi cycles through a ``band'' of candidate-vectors  $\mat{\vh_n&\vh_{n+1} &\ldots&\vh_{n+ m_c}}$, where $m_c(n)$ is the current band size on the $n$-th iteration of the main loop. The initial band  is the start block
+\[
+\mat{\vh_1&\vh_2&\cdots&\vh_m} = \mat{\Rr_1&\Rr_2&\cdots&\Rr_\nin} = \RR.
+\]
+ On the $j$-th iteration of the algorithm, the candidate-vector $\vh_j$ either gets deflated or becomes Krylov basis-vector $v_j$, which is then advanced via Arnoldi iteration to be candidate-vector $\vh_{j+m_c}$.  If  we deflate  $\vh_j$  then the band size $m_c$ is decremented.   Since the algorithm proceeds as a continuous cycle rather than a block iteration, at any step $n$  it is simpler to refer to the computed basis $V\in\C^{N\times n}$ for $\krylov{n}{\H}{\RR}$, where $n$ is the dimension of the basis, rather than a block-degree.  
+
+\subsection{Band-Arnoldi relation}
+The band-Arnoldi algorithm run for $n$-iterations with operator $\H$ and start-block $\RR$ returns a basis $V\in\C^{N\times n}$ for    $\krylov{n}{\H}{\RR}$,  remaining candidate-vectors $\Vh=\mat{\vh_{n+1}&\vh_{n+2} &\ldots&\vh_{n+m_c}}$, deflated vectors $\Vd=\mat{\vd_1&\vd_2&\ldots&\vd_d}$ if any deflation occured, and Rayleigh-quotient $\Himp=\c{V}\H V$ that satisfy the band-Arnoldi relation 
+\begin{align}
+\H V  &= V \Himp + \mat{(I-V\c{V}) \Vd  &  \Vh} \mat{F_1\\F_2} \label{eq:barnoldi_relation} \\
+&=   V \Himp + \Vdh F. \tag{\ref{eq:barnoldi_relation}*}
+\end{align}
+
+$\Himp$ is strictly upper-Hessenberg in the single vector setting.  For general $\RR$ with dimension $m$, $\Himp$ has zeros below the $(m+1)$-th diagonal if no deflation was performed, or possibly non-zero (but smaller than deflation tolerance $\dtol$) columns in the typically zero region, corresponding to the deflated vectors $\Vd$.  For an example, see table~\ref{tab:bArnoldi_structure}.  $F_1$ and $F_2$ are indexing matrices that position vectors $\vd_j$ and $\vh_j$ respectively into the $n$ available positions of the $N\times n$ block \eqref{eq:barnoldi_relation}.  
+ 
+
+
+
+\begin{table}
+\centering
+\singlespacing
+\subfloat[\label{mat1}]{
+$\begin{pmatrix}
+ *&*&*&*&*&*&*&*&*&*\\
+ *&*&*&*&*&*&*&*&*&*\\
+ *&*&*&*&*&*&*&*&*&*\\
+  &*&*&*&*&*&*&*&*&*\\
+  & &*&*&*&*&*&*&*&*\\
+  & & &*&*&*&*&*&*&*\\
+  & & & &*&*&*&*&*&*\\
+  & & & & &*&*&*&*&*\\
+  & & & & & &*&*&*&*\\
+ & & & & & & &*&*&*\\
+\end{pmatrix}$}
+\qquad
+\subfloat[\label{mat2}]{
+$\begin{pmatrix}
+ *&*&*&*&*&*&*&*&*&*\\
+ *&*&*&*&*&*&*&*&*&*\\
+ *&*&*&*&*&*&*&*&*&*\\
+  &*&*&*&*&*&*&*&*&*\\
+  & &*&*&*&*&*&*&*&*\\
+  & & &*&*&*&*&*&*&*\\
+  & & & &\cdot& *&*&*&*&*\\
+  & & & & \cdot& &*&*&*&*\\
+  & & & &\cdot & & &*&*&*\\
+ & & & & \cdot& & & &*&*\\
+\end{pmatrix}$ }
+\caption{\label{tab:bArnoldi_structure} \subref{mat1} is an example of the nonzero structure of $\Himp$ after 10 iterations of a band-Arnoldi process with band-size $m=2$.   \subref{mat2} is what $\Himp$ would look like if an inexact deflation occurred on the $5$-th iteration, where `$\cdot$' represents the small contribution of $\Himp_\mathcal{E}=\c{V}\Vd$, comprised values smaller than $\dtol$. If an exact deflation occurred then those values would be zero.}
+\end{table}
+
+The compact shorthand $\Vdh$ in (\ref{eq:barnoldi_relation}*)  reflects that $\Vd$ is
+often zero or negligible for most computation purposes, but we must include it in order for equality to hold.     
+
+In addition to $V$, $\Vh$, $\Vd$, and $\Himp$   , algorithm~\ref{alg:barnoldi} returns $\rrimp$, and $\rrimp^\defl$ where
+\begin{equation}
+\begin{aligned}
+\RR &= V \rrimp + \rrimp^\defl\\
+& = V \rrimp + \Vd F_0,
+\end{aligned}
+\label{eq:barnoldi_rho_relation}
+\end{equation}
+and $\c{V}\RR = \rrimp$.  
+
+\subsection{Candidates/residual term}
+{\singlespacing
+\begin{align*}
+\Vh F_2 &= \mat{0&0&\cdots&0&\Vh}\in\C^{N \times n}\\
+&= \mat{\vh_{n+1}&\vh_{n+2} &\ldots&\vh_{n+ m_c}}
+\mat{0&&\cdots&1\\
+ 0&&\cdots&&1 \\
+  0  &&\cdots&&&\ddots \\ 
+   0 &&\cdots&&&&1 }
+\end{align*}
+}
+ is the residual term involving the band $\Vh$ of candidate-vectors after the $n$-th iteration of the main loop.
+The matrix $F_2\in\{0,1 \}^{m_c\times n}=\mat{0&0&\cdots&0&I}$ simplifies to $e^T_n$ for the single vector iteration.  $F_2$ places $\Vh$ in the last $m_c$ of $n$ positions.   Note that $\c{V}\Vh=0$.
+
+
+
+\subsection{Deflation term}
+$\Vd F_1\in\C^{N\times n}$ is the zero or mostly-zero matrix $\Vh^\defl$ implied by algorithm~\ref{alg:barnoldi} (band-Arnoldi).  If no deflation or only exact deflation occurred then $\Vd=0$ and $\Vd F_1$ is an $N\times n$ matrix of zeros.   If inexact deflation was performed on the $j$-th candidate-vector then $j\in\mathcal{I}$ and $\vh^\defl_j\neq 0$.   Negative or zero indices  in $\mathcal{I}$ correspond to deflations that happened within the start block $\RR$.  For example, if $j-m\leq 0$ then $\rrimp^\defl_j=\vh^\defl_{j-m}$.   We may similarly define $F_0$ so that $\rrimp^\defl=\Vd F_0$.
+
+As an example of a deflation matrix $ \Vh^\defl $,  suppose $d=2$ vectors $\vd_1=\vh^\defl_2$ and $\vd_2=\vh^\defl_5$ were deflated at iterations $m_c+2$ and $m_c+5$ of a band-Arnoldi process of $n=m_c+10$ iterations, with band-size $m_c$. Then for standard basis vectors $e_2,e_5\in\R^{10}$,
+\begin{equation}
+\begin{aligned}
+\Vd F_1  = \Vh^\defl &=  \mat{0&\vh^\defl_2&0&0&\vh^\defl_5&0&0&0&0&0} \\
+&= \mat{0&\ \vd_1\ &0&0&\ \vd_2\ &0&0&0&0&0}\\
+&= \mat{\vd_1&\vd_2}\mat{e_2^T \\ e_5^T}.
+\end{aligned}
+\label{eq:ex_V_defl}
+\end{equation}
+
+The band-Arnoldi algorithm deflates a candidate-vector $\vh_j$ (i.e. removes it from further iterations) if $\| \vh_j \|\leq \dtol$\footnote{\cite{parlett1979lanczos} suggests $\dtol =\sqrt{\epsilon}$, where machine-$\epsilon = 2^{-52} \approx 2.22\text{e-16}$ in double-precision (64-bit) floating point.}  after orthogonalizing $\vh_j$  against $V=\{v_1,v_2,...,v_j\}$, which means it is almost linearly dependent with previous basis vectors.  Algorithm~\ref{alg:barnoldi} then sets $\vh^\defl_j:=\vh_n$ and removes it as a candidate, and the current band size $m_c$ is decreased by one.   $\vh^\defl$ is no longer used for iterations and basis vectors $v_{j+1},v_{j+2},\ldots,v_{n+m_c}$ are not made orthogonal to  $\vh_j^\defl$.   Then 
+\begin{equation}
+\c{V} \vh_j^\defl= \mat{0&0&\cdots&0&\c{v_{j+1}}\vh_j^\defl&  \c{v_{j+2}}\vh_j^\defl&\cdots&\c{\vh_j}\vh_j^\defl}^T.
+\label{eq:perturbation_term}
+\end{equation}
+\eqref{eq:perturbation_term} implies that $\| \c{V} \vd \| \leq \| \vd\| \leq \dtol$.
+
+If no/exact deflation was performed,  $\Himp$ is of the form in table~\ref{mat1}, otherwise $\Himp$ may have non-zero entries in the typically-zero region $\Himp_\mathcal{E}=\c{V}\Vd$.     
+If an inexact deflation occurred on the $j$-th iteration, \eqref{eq:perturbation_term} is included in 
+the Rayleigh-quotient $\Himp$ as the $j$-th column of $\Himp_\mathcal{E}$.  
+Then 
+\begin{equation}
+\|\Himp_\mathcal{E} \| = \| \c{V}\Vd  \|_F \leq \| \Vd\|_F  \leq \dtol \sqrt{d}, 
+\end{equation}
+and
+\begin{equation}
+\| (I-V\c{V}) \Vd \|_F \leq\| \Vd\|_F . 
+\label{eq:vdot_norm_bound}
+\end{equation}
+
+
+
+\smallskip
+$\rrimp^\defl$ in \eqref{eq:barnoldi_rho_relation} is also an all or mostly-zero matrix of very small norm, representing deflations that occurred during the first $m$-iterations, i.e. linear dependence within the start block $\RR$.   
+
+
+
+
+
+
+\subsection{Residual-norms for determining Ritz-convergence}
+Given basis $W=\mat{w_1&w_2&\cdots&w_n}$ of the eigenvalue-decomposition $\Himp W = W \Lambda$ and basis $Z= V W$ of long Ritz-vectors, the residual  for a Ritz-pair $(\lambda_j,z_j)$, is 
+\begin{align*}
+\H z_j - z_j \lambda_j &=\mat{(I-V\c{V})\Vd & \Vh}F w_j
+\end{align*}
+
+The square of the so-called residual-norm of the Ritz-pair is 
+\begin{equation}
+\begin{aligned}
+\| \H z_j - z_j \lambda_j \|_2^2  
+&\leq d\,\varepsilon_M   + \|  \Vh F_2 w_j \|_2^2 \\
+&= d\, \varepsilon_M   + \|  \Vh \tilde{w}_j \|_2^2.
+\end{aligned}
+\label{eq:barnoldi_resid}
+\end{equation}
+where $\tilde{w}_j\in\C^{m_c}$ is the last $m_c$ elements (rows) of short Ritz-vector $w_j$.
+
+\eqref{eq:barnoldi_resid} suggests a few different ways to cheaply estimate  \emph{relative} residual-norm
+\begin{equation}
+ \texttt{rr}_j = \frac{\|\H z_j - z_j \lambda_j \|}{\|\lambda_j z_j \|} 
+\label{eq:rel_resid_def}
+\end{equation}
+for a Ritz-pair $(\lambda_j,z_j)$.   We assume $\| z_j\|=1$, so that $\| \lambda z_j\| = | \lambda|$.
+
+Some methods estimate the relative residual-norm as $\|\H z_j - z_j \lambda_j \| / \|\H z_j\|$ with an estimate of $\| \H \|$ or with $\| \Himp \|$.    We use $| \lambda|$ because it is uncertain whether  $\| \H \|$ or $\| \Himp \|$ are good estimates of $\| \H \|$.
+
+\subsubsection{Relative residual-norm bounds}
+Assuming $d\, \varepsilon_M$ is negligible, 
+\begin{equation} 
+ \texttt{rr}_j \leq \nrm{}{\Vh}\frac{ \| \tilde{w}_j\|}{| \lambda_j|}
+\label{eq:resid_estimate1}
+\end{equation}
+is an estimate of \eqref{eq:rel_resid_def}, as is 
+\begin{equation} 
+ \texttt{rr}_j \leq
+\frac{1}{| \lambda|}
+\mat{\|\vh_1\|& \| \vh_2 \| &\cdots& \| \vh_{m_c}\| }
+\mat{| \tilde{w}_j^{(1)}|\\ |\tilde{w}_j^{(2)}| \\ \vdots \\ | \tilde{w}_j^{(m_c)}| }.
+\label{eq:resid_estimate2}
+\end{equation}
+Both \eqref{eq:resid_estimate1} and \eqref{eq:resid_estimate2} are cheaper to compute than norms $\| \Vh \tilde{w}_j \|$ of potentially large matrix-vector products, but  \eqref{eq:resid_estimate2}  might be better if $\Vh F_2$ has rank greater than one.  Estimates  \eqref{eq:resid_estimate1} and \eqref{eq:resid_estimate2} are equal for rank-$1$ residuals.
+
+
+
+\begin{algorithm}[htb]% note this is being handled by the algorithm2e package
+\DontPrintSemicolon
+\SetKwComment{tcp}{\% }{}
+\KwIn{$\H$ and start-block $\RR=\mat{\Rr_1&\Rr_2&\cdots&\Rr_\nin}$, $n_\texttt{max}$}
+\KwOut{basis $V$ for $\krylov{n}{\H}{\RR}$, deflated vectors $\Vd$, candidate-vectors $\Vh$, $\Himp$, and $\rrimp$ that satisfy \eqref{eq:barnoldi_relation}}
+
+$\vh_i := \Rr_i $\quad for $i=1,2,\ldots,m$\;
+$m_c := m$\;
+$\mathcal{I}:=\emptyset$\;
+
+\For{$n = 1$ \KwTo $n_\texttt{max}$}{
+	\While(\qquad\tcp*[h]{remove $\vh_n$ if necessary (deflation)}){$\nrm{2}{\vh_n} <  \texttt{dtol} \cdot \nrm{est}{\H}$}
+	{
+		$\vh^\defl_{n-m_c}:= \vh_n$ \;
+		$\mathcal{I} = \mathcal{I} \cup \{ n-m_c\}$ \tcp{locations in $\Vh^\defl$ (or $\rrimp^\defl$) that contain deflated vectors}
+		$m_c := m_c -1$  \qquad\tcp{we assume no early termination}
+		$\vh_j := \vh_{j+1}$ \quad for $j=n,n+1,\ldots,n+m_c-1$\;
+	}	
+\BlankLine
+	$h_{n,n-m_c} := \nrm{2}{\vh_n}$ \;
+	$v_n := \vh_n / \nrm{2}{\vh_n}$\;
+\BlankLine
+
+\For(\qquad\tcp*[h]{Make candidates $\{\vh_1,\vh_2,...,\vh_n\}$ orthogonal to $v_n$}){ $j = n+1$ \KwTo $n+m_c -1$}{	
+		$h_{n,j-m_c} := \c{v_n} \vh_j$  \;
+		$\vh_j := \vh_j - h_{n,j-m_c}v_j$\; 
+}
+\BlankLine
+	$\vh_{m_c + n} :=  \H v_n$\;
+
+\BlankLine
+	\For(\qquad\tcp*[h]{Make $\vh_{m_c + n}$ orthogonal to previous $\{v_1,v_2,\ldots,v_n\}$}){ $j = 1$ \KwTo $n$}
+	{	
+		$h_{j n} := \c{v_j} \vh_{m_c + n}$  \;
+		$\vh_{m_c + n} := \vh_{m_c + n} - h_{j n}v_j$\; 
+	}
+
+\For{$j\in\mathcal{I}$ \label{line:algdiff}}{$h_{nj} :=\c{v_n} \vh_j^\defl$}
+}
+\KwRet{$V$,  $\Himp$, $\rrimp =\mat{h_{ij}}_{i=1,2,...,m}^{ j=1-m...,1,0}$ , $\Vh$, $\Vh^\defl$, $\rrimp^\defl = \mat{\vh^\defl_j}, j=1-m,...,1,0$, }  \;
+\caption{{\sc Band-Arnoldi}}
+\label{alg:barnoldi}
+\end{algorithm}
+
+\clearpage 
+
+
+
+
+\section{Thick-restarting the Band-Arnoldi process} \label{sec:IRA_bArnoldi}
+In \S\ref{sec:ritz_restart} we will discuss the theory of thick-starting a band-Arnoldi process explicitly with $\ell$ Ritz-vectors.  In \S\ref{sec:manual_deflation} we will show how we implemented the thick-restart cycle in a multiple-shift model-reduction context where an orthogonal basis $Y$ of ``locked'' vectors are explicitly passed into the band-Arnoldi algorithm as part of the start-block $\mat{Y& \RR}$.   We will address forcing deflation of the first $\ell$ residual-candidate vectors and why we do it. 
+
+% This explicit-restart method may be impractical for some MOR applications because it involves $\ell$ matrix-vector products  (computing $\H Y$) that could be considered unnecessary.     Finally, we will show in \S\ref{sec:implicit_restart} how an implicit-restart can be implemented.   An implicit-restart consists of ``pre-loading'' band-Arnoldi data structures and continuing the algorithm from step $\ell+1$, saving $\ell$ matrix-vector products.  There are a few caveats to doing the implicit-restart that might render it not worth the reduction in cost, and we will address them.
+ 
+\subsection{Explicitly thick-starting with Ritz-vectors}\label{sec:ritz_restart}
+Suppose we identified $\ell$ Ritz-pairs $(\lambda_j,z_j)$ with residuals $\gamma_j$ so that 
+\begin{equation}
+\H z_j - \lambda z_j = \gamma_j
+\label{eq:Ritz_and_resid}
+\end{equation}
+for $j=1,2,...,\ell$.
+If we run the band-Arnoldi algorithm with $\H$ and start-block $\mat{Z&\RR}$ where $Z=\mat{z_1&z_2&\cdots&z_\ell}$ and $\RR=\mat{\Rr_1&\Rr_2&\cdots&\Rr_m}$, then assuming no linear-dependence within the start block, $\ell$ iterations yields an $\ell\times\ell$ upper-triangular coefficient matrix $U$, and  $Y =\mat{y_1&y_2&\cdots&y_\ell}$ is an orthonormal basis for $\spn Z$ where 
+\[
+u_{jj} y_j = (I - Y_{j-1}\c{Y_{j-1}})z_j
+\]    
+for $j=1,2,\ldots,\ell$, and 
+$u_{jj}=\lambda_j$ is the diagonal element of $U$. Note that $Y$ and $U$ are just different names for the quantities we defined previously as $V$ and $\Himp$, but constructed after only $\ell$ iterations of the ``thick'' start-block $\mat{Z&\RR}$.   $Z = Y U$ can be regarded as a QR factorization.  Assuming unit Ritz-vectors, the next $\ell$ candidate-vectors are
+\begin{equation}
+\begin{aligned}
+\vh_{\ell+m+j} &= (I-Y_j\c{Y_j})\H v_j\\
+&= (I-Y_j\c{Y_j})\H   (I - Y_{j-1}\c{Y_{j-1}})z_j\\
+&=  (I-Y_j\c{Y_j})\H z_j, \quad\text{because } \H Y_{j-1} \subset \spn Y_j \\
+&=   (I-Y_j\c{Y_j})(\lambda_j z_j + \gamma_j)\\
+&= (I-Y_j\c{Y_j}) \gamma_j \qquad \text{because } z_j\in\spn Y_j. 
+\end{aligned}
+\label{eq:candies}
+\end{equation}
+for $j=1,2,...,\ell$.
+Then the  $\ell+m$ band of candidate-vectors at that point is  
+\begin{equation}
+\mat{(I - Y_\ell\c{Y_\ell})\RR & \vh_{\ell+m+1} & \vh_{\ell+m+2} & \ldots& \vh_{2\ell+m}}.
+\label{eq:thick_restart_preload}
+\end{equation}
+
+Note that $(I-Y_j\c{Y_j}) \gamma_j = \gamma_j$ if the residual $\gamma_j$ is orthogonal to $\{z_1,z_2,...,z_j\}$, which is the case when the basis $Z$ of Ritz-vectors came from one cycle of a Krylov process such as algorithm~\ref{alg:barnoldi}.   If we consider restarts however, the Ritz-vectors from each restart will have a different orthogonal residual, so the set of  Ritz-vectors will not be orthogonal to the set of residuals in general. 
+
+If the Ritz-pairs \eqref{eq:Ritz_and_resid} have ``deflatable'' residuals, i.e. $\| \gamma_j \| < \dtol$, then the associated candidate vectors \eqref{eq:candies} will be near-zero and will get deflated when we continue iterating on step $\ell+1$.
+
+\subsection{A thick-restart example}
+In table \ref{tab:band_example1} we give a structural-example of a coefficient matrix from a $n=10$ iteration cycle of Band-Arnoldi with band-size $m=2$, followed by a thick-restarted cycle in tables \ref{eq:band_example_2kept} and  \ref{eq:band_example_3kept}.  The $\H$ and $\RR$ used to produce it were random matrices with $N=100$, but the reader should note that $N$ is not important.  
+
+
+\begin{table}
+\centering
+$ \Himp = \mat{
+ h & h & h & h & h & h & h & h & h & h \\
+ h & h & h & h & h & h & h & h & h & h \\
+ h & h & h & h & h & h & h & h & h & h \\
+  & h & h & h & h & h & h & h & h & h \\
+  &  & h & h & h & h & h & h & h & h \\
+  &  &  & h & h & h & h & h & h & h \\
+  &  &  &  & h & h & h & h & h & h \\
+  &  &  &  &  & h & h & h & h & h \\
+  &  &  &  &  &  & h & h & h & h \\
+  &  &  &  &  &  &  & h & h & h \\
+}$ 
+\caption{\label{tab:band_example1}The Rayleigh-quotient produced by 10 iterations of standard  band-Arnoldi with band-size $m=2$. The triangular region below the $(m+1)$-th subdiagonal is zero.  For $m=1$, $\Himp$ would be strictly upper-Hessenberg.} 
+\end{table}
+
+After after identifying 2 (or 3) Ritz-vectors of $\Himp$ we restarted the process, augmented by those Ritz-vectors.  We deliberately chose Ritz-vectors that were not converged so that the residuals were too large to be deflated naturally.   
+
+\begin{table}
+\centering
+\subfloat[\label{tab:nat1} cycle 2: natural deflation]{ 
+$\mat{
+ u & u & g & g & g & g & g & g & g & g \\
+  & u & g & g & g & g & g & g & g & g \\
+  &  & h & h & h & h & h & h & h & h \\
+  &  & h & h & h & h & h & h & h & h \\
+ y & y & h & h & h & h & h & h & h & h \\
+  & y & h & h & h & h & h & h & h & h \\
+  &  & h & h & h & h & h & h & h & h \\
+  &  &  & h & h & h & h & h & h & h \\
+  &  &  &  & h & h & h & h & h & h \\
+  &  &  &  &  & h & h & h & h & h \\
+}$ }
+\qquad
+\subfloat[\label{tab:fd1}cycle 2: forced deflation]{ %
+$\mat{
+ u & u & g & g & g & g & g & g & g & g \\
+   & u & g & g & g & g & g & g & g & g \\
+   &   & h & h & h & h & h & h & h & h \\
+   &   & h & h & h & h & h & h & h & h \\
+   &   & h & h & h & h & h & h & h & h \\
+   &   &   & h & h & h & h & h & h & h \\
+   &   &   &   & h & h & h & h & h & h \\
+   &   &   &   &   & h & h & h & h & h \\
+   &   &   &   &   &   & h & h & h & h \\
+   &   &   &   &   &   &   & h & h & h \\
+}$ }
+\caption{\label{eq:band_example_2kept} These are  both taken after re-starting the cycle from table~\protect\ref{tab:band_example1}, with 2 Ritz-vectors. No deflation occurred in \subref{tab:nat1}  because the Ritz vectors were not sufficiently converged, so it is similar in structure to a standard cycle with $m=2+2$.  In contrast, for \subref{tab:fd1} we forced deflation of all Ritz-residuals. \subref{tab:nat1}  is a proper Rayleigh-quotient but \subref{tab:fd1} is not.  The advantage to \subref{tab:fd1} is that is cheaper to produce and permits a Krylov-Schur-type implicit-restart.}
+\end{table}
+
+\begin{table}
+\centering
+\subfloat[\label{tab:nat2}natural deflation]{%
+$\mat{
+ u & u & u & g & g & g & g & g & g & g \\
+   & u & u & g & g & g & g & g & g & g \\
+   &   & u & g & g & g & g & g & g & g \\
+   &   &   & h & h & h & h & h & h & h \\
+   &   &   & h & h & h & h & h & h & h \\
+ y & y & y & h & h & h & h & h & h & h \\
+   & y & y & h & h & h & h & h & h & h \\
+   &   & \e  & h & h & h & h & h & h & h \\
+   &   &  \e & 0  & h & h & h & h & h & h \\
+   &   &   \e&   & 0  & h & h & h & h & h \\
+}$ }
+\qquad
+\subfloat[forced deflation]{%
+$\mat{
+ u & u & u & g & g & g & g & g & g & g \\
+   & u & u & g & g & g & g & g & g & g \\
+   &   & u & g & g & g & g & g & g & g \\
+   &   &   & h & h & h & h & h & h & h \\
+   &   &   & h & h & h & h & h & h & h \\
+   &   &   & h & h & h & h & h & h & h \\
+   &   &   &   & h & h & h & h & h & h \\
+   &   &   &   &   & h & h & h & h & h \\
+   &   &   &   &   &   & h & h & h & h \\
+   &   &   &   &   &   &   & h & h & h \\
+}$ }
+\caption{\label{eq:band_example_3kept} This is a restarted-cycle following \ref{tab:band_example1},  similar to table~\ref{eq:band_example_2kept} except that we kept 3 (unconverged) Ritz-vectors instead of 2.  Since the band-size of the first cycle was $m=2$, the Ritz-residual had rank-2 so one residual-vector was deflated on iteration 8, which we indicated by leaving those zero-entries visible.   After a candidate vector is removed from iterations via inexact-deflation, band-Arnoldi continues to orthogonalize new iterates against it, indicated by the $\e$ entries which are smaller than the deflation-tolerance $\dtol$ and may be considered negligible. There are $\dim \Yh \leq \ell$ rows of `$y$' entries in \subref{tab:nat2} that reflect orthogonalization of $V$ against the residual $\Yh$. In the forced-deflation, all three residuals were manually deflated on step 6.}
+\end{table}
+
+
+\subsection{Thick-restart with natural deflation of iterates}
+For this discussion there is no loss of generality to assume we augment the start block with an already-orthogonal basis $Y$ for the subspace spanned by the kept Ritz-vectors, so that the  Krylov-Schur relation associated with $Y$ under $\H$ is 
+\begin{equation}
+\H Y = Y U +  \Yh B,
+\label{eq:thick_krylov_schur}
+\end{equation}
+
+
+  Letting the process proceed without intervention (naturally) for $n+\ell$ iterations, band-Arnoldi returns basis $\Vt = \mat{Y&V}$ and Rayleigh-quotient $\Himp = \c{\Vt} \H \Vt$, that satisfy  
+\begin{align}
+\H \mat{Y&V} &= \mat{Y&V} \underbrace{\mat{\tilde{U} & G \\ \cal{E}&\hat{H}}}_{\Himp} 
++\mat{(I-Y\c{Y})\Yh & & \\
+		(I-V\c{V})\Yh & \Vdh } 
+\mat{B&\\&F}
+\label{eq:thick_barnoldi_relation_ugly} 
+\end{align}
+ where $\Vdh$, and $F$ are defined as in \eqref{eq:barnoldi_relation}. 
+The blocks 
+\begin{equation}
+\tilde{U}=U+\c{Y}\Yh
+\end{equation}
+and 
+ \begin{equation}
+\mathcal{E}=\c{V}\Yh B
+\label{eq:VHYh}
+\end{equation}
+ represent operations that must be carried out by band-Arnoldi in order for  \eqref{eq:thick_barnoldi_relation_ugly} to be orthogonal, i.e. in order for left-multiplication by $\Vt = \mat{Y&V}$ to yield $\Himp = \c{\Vt} \H \Vt$.   This is because, unlike a typical Arnoldi process, the residual $\Yh$ is not included in the basis $\mat{Y&V}$.
+  
+Examples of $\Himp$ are given in tables \ref{tab:nat1} and \ref{tab:nat2}, except they might be misleading because in both of those examples, the restart is on the second cycle, so $\tilde{U} = U$ is upper triangular.  This will not be true in a general multiple-restart context.  
+
+
+ For a basis of $Y$ Ritz-vectors from  one cycle of standard band-Arnoldi, the residual $\Yh$ is orthogonal to $Y$ (as in example tables \ref{tab:nat1} and \ref{tab:nat2}), but since every cycle produces a different residual, we can expect $\text{rank } \Yh  \leq \ell = \dim Y$ and $\Yh$ not orthogonal to $Y$ in  general.  Then the candidate vectors corresponding to $\Yh$ are made orthogonal to $Y$ as they are processed, resulting in the translation  
+\begin{equation}
+\H Y = Y \tilde{U} +  (I-Y\c{Y})\Yh B
+\label{eq:band_deflated_decomp_orth}
+\end{equation}
+of \eqref{eq:thick_krylov_schur}.
+
+Similarly, $\mathcal{E}$ \eqref{eq:VHYh} has $\text{rank } \Yh$ nonzero rows and comes from orthogonalizing iterates $v_i$ against $\spn \Yh$.   
+
+ In the thick-restart \cite{dynamicthick} and Krylov-Schur  \cite{stewart2002krylov} schemes for single-vector iterations, they assume $\nrm{}{\mathcal{E}}\leq\|\Yh \|$ is small enough to be negligible, so that $U^\prime\approx U$ is upper-triangular.  Also, they restart with the residual from a previous cycle, which in our case would be $\Yh$.  In that case $\Yh$ would be included in $V$ and $\mathcal{E}$ would be zero.  Those methods then take advantage of the upper-triangular structure of the leading $\ell\times\ell$ principle sub-matrix $U$.  We can mimic this somewhat by forcing deflation of $\Yh$, which is discussed in the next section.
+
+
+\subsection{Forced deflation of iterates}\label{sec:manual_deflation}
+Rather than let band-Arnoldi naturally deflate the residuals, our thick-restart manually deflates them.  What that means is, after the first $\ell$ iterations of band-Arnoldi starting with $\mat{Y&\RR}$, we set to zero the candidate vectors 
+\[ 
+ \vh_{\ell+m+1}, \vh_{\ell+m+2},\ldots, \vh_{2\ell+m} := 0
+\]
+ of \eqref{eq:thick_restart_preload}.  We treat $Y$ as an exactly-invariant subspace basis. In that case, a total of $\ell+ n$ iterations yields 
+\begin{align}
+\H \mat{Y&V} &= \mat{Y&V} \mat{U & G \\ &\hat{H}} 
++\mat{ \Yh B & \Vdh F } 
+\label{eq:thick_barnoldi_relation} 
+\end{align}
+
+
+\subsection{Determining poles of a thick-restarted ROM}
+Taking a full or partial similarity decomposition $\Himp W = W \Lambda$, the associated block $Z= \mat{Y&V}W$ has residual
+\[
+\H Z - Z \Lambda = \mat{(I-Y\c{Y})\Yh & & \\
+		(I-V\c{V})\Yh &(I-V\c{V})\Vd & \Vh } \mat{B&\\&F_1\\&F_2} W.
+\]
+
+Let $\yh^T$, $\vd^T$,  and $\vh^T$ be the row vectors of norms of the columns of $\Yh$, $\Vd$, and $\Vh$, respectively.  For example, 
+\[
+\yh^T = \mat{\| \yh_1 \| &\| \yh_2 \| &\cdots&\| \yh_\nYh \|} . 
+\]
+
+Let
+\[
+ f^T:=\mat{\yh^T  & \vd^T   & \vh^T }\mat{B&\\&F_1\\&F_2}.
+\]
+For many  applications $\| \Vd \|_F\leq \dtol \sqrt{d}$ is negligible, in which case $f^T \approx \mat{\yh^T B & \vh^T F_2}$.  The residual-norm $\| \Yh \|$ of $Y$ is small in the sense that it represents a nearly-invariant-subspace  to some degree, but it is not negligible in general. 
+
+ 
+  For an individual Ritz-pair $z_j=\mat{Y&V}w_j\in Z_2$ and $\lambda_j\in\Lambda$, a bound for residual-norm is
+\begin{equation}
+\nrm{}{\H z_j - \lambda_j z_j} \leq |f^T w_j|.
+\label{eq:ritz_resid_bound1}
+\end{equation}
+Note that 
+\[
+|f^T w_j| \geq \| \| \Yh \|,
+\]
+so our residual-norm estimate can never be better than $\| \Yh\|$.
+We consider Ritz-vector $z_j$ to be converged if the relative residual-norm
+\begin{equation}
+\text{rr}_j = \frac{|f^T w_j|}{\nrm{\text{est}}{\H}} \leq \text{ctol}.
+\label{eq:rr_band1}
+\end{equation}
+ $\nrm{\text{est}}{\H}=\max_{v}\nrm{}{\H v}$ is an estimated operator-norm of $\H$ obtained during iterations.   A value suggested by \cite{parlett1979lanczos}  is $\text{ctol}=\sqrt{\epsilon}$, which is the same value used for $\dtol$ in \cite{AN}.   
+
+The bound used by ARPACK suggests that $(\lambda_j,z_j)$ is converged if   
+\[
+|f^T w_j| \leq \max\{ \epsilon_M \| \Himp \|, \text{ctol}\cdot  |\lambda| \}.
+\]
+
+
+\begin{comment}%%%%%%%%%%%
+\section{Implicit restart}\label{sec:implicit_restart}
+The mechanism of deflation is to reduce \eqref{eq:thick_barnoldi_relation_ugly} or  \eqref{eq:thick_barnoldi_relation}  to a new orthonormal Krylov-Schur relation 
+ \begin{equation}
+\H_2 \widehat{Y} \approx \widehat{Y} \widehat{U}
+\label{eq:deflated_decomp2}
+\end{equation}
+where 
+\begin{equation}
+\widehat{Y} = \mat{Y& Y^\prime}, \qquad \qquad
+\widehat{U} = \mat{U & * \\  & U^\prime}
+\end{equation}
+ represent the enlarged subspace $\widehat{\Y}$ that we will use as the thick-restart basis for the next cycle. The basis for the  subspace $\widehat{\Y}$  will contain the same vectors $Y$, appended with basis $Y^\prime$ for 
+\[
+\Y^\prime\subseteq\spn V = \krylov{k}{\H}{\Rr}\setminus \Y,
+\]
+ most likely consisting of newly converged Schur-vectors. 
+
+
+
+\paragraph{Deflation without eigen-decomposition}
+We will show two ways to deflate \eqref{eq:simplifed_thick}, depending on whether or not we need Ritz-vectors (for ROM pole-analysis for example).  The first way is cheaper and does not compute an eigenvalue decomposition.  It only involves a Schur-decomposition $\Himp^\prime S = S U^\prime$ of the $k\times k$ south-eastern block $\Himp^\prime$, and up to $k-1$ re-orderings.     
+
+Right-multiplying \eqref{eq:simplifed_thick} with $\mat{I&0\\0&S}$ yields the Krylov-Schur decomposition  
+\begin{align}
+\H \mat{Y &V S} &=  \mat{Y & V }
+\mat{U & GS \\ 0&\Himp^\prime S} +  \mat{0  &  r_k e^T_k S}\nonumber\\
+&=\mat{Y & V } \mat{I&0\\0&S}\mat{U & GS \\ 0&U^\prime} +  \mat{0  &  r_k \c{s}}\nonumber\\
+&= \mat{Y &V S}\mat{U & GS \\ 0&U^\prime} + r_k \mat{0  &  \c{s}}
+\label{eq:schur_thick}
+\end{align}    
+that we are going to truncate, with $s=\c{S}e_k=(s_1,s_2,\ldots,s_k)$.   The structure of \eqref{eq:schur_thick} permits us to know that the Ritz-vector $z_1\in\spn \mat{Y &V s_1}$ associated with diagonal entry/Ritz-value $u^\prime_{11}$ satisfies 
+\begin{equation}
+\nrm{2}{\H z_1 - u^\prime_{11}z_1} \leq |s_1|,
+\label{eq:schur_residual} 
+\end{equation}
+but only for the first diagonal entry $u^\prime_{11}$ of $U^\prime$, so we must re-order the Schur-decomposition  $\H S = S U^\prime$  (and re-evaluate $s=\c{S}e_k$) to check residual error for different Ritz-values of  $U^\prime$.  To see this, consider the general $\ell=3$, $k=2$ case, where 
+\begin{equation}
+\mat{U & GS \\ 0&U^\prime} =
+ \mat{u_{11}&*&*&*&*\\%
+        &u_{22}&*&*&*\\
+	  &&u_{33}&*&*\\
+	 &&&u_{11}^\prime&* \\
+	 &&&&u^\prime_{22}\\
+}
+\end{equation}
+and 
+\[
+\mat{0  &  \c{s}} = \mat{0&0&0&s_1&s_2}
+\]
+and we assume $s_1,s_2\neq 0$.  Then there is an orthogonal matrix $Q$ such that 
+\begin{equation}
+\c{Q}\mat{U & GS \\ 0&U^\prime}Q =
+ \mat{u_{11}^\prime&*&*&*&*\\%
+        &u_{22}&*&*&*\\
+	  &&u_{33}&*&*\\
+	 &&&u_{11}&* \\
+	 &&&&u^\prime_{22},
+}
+\end{equation}
+and the first $4$ entries of 
+\[
+\mat{0  &  \c{s}}Q = \mat{0&0&0&s_1&s_2}Q
+\]
+\alert{get back to this}
+
+\medskip
+
+ In general, the first non-zero entry $s_j$ of 
+\[
+\mat{0  &  \c{s}} = \mat{0&\cdots&0&s_j&s_{j+1}&\cdots&s_k}
+\]
+ serves as a residual-error for its corresponding Ritz value $u^\prime_{jj}$ on the diagonal of $U^\prime$.   If we determine that $u^\prime_{jj}$ is converged because\footnote{We set $\texttt{tol}:= 10^4$ for most numerical experiments.} 
+\[
+|s_j| <\texttt{tol} \cdot |u^\prime_{jj}|
+\]
+ or we want to keep its associated Schur-vector for some other  reason, we set $s_j$ to zero, otherwise we re-order the Schur decomposition so that $u^\prime_{jj}$ is in the last position of $ U^\prime$ and reconsider \eqref{eq:schur_thick} with the new ordering.   
+
+
+
+\paragraph{Deflation with eigen-decomposition}
+Recall the thick-restart Krylov decomposition 
+\begin{equation}
+\H \mat{Y &V} =  \mat{Y & V }
+\mat{U & G \\ &\hat{H}} +   \mat{\Yh B  &  \Vdh F}
+\label{eq:simplifed_thick}
+\end{equation}    
+that we want to deflate, and consider the eigen-decomposition
+\begin{equation}
+\mat{U & G \\ &\hat{H}}\mat{W_{11}&W_{12}\\&W_{22}} 
+=
+\mat{W_{11}&W_{12}\\&W_{22}} 
+\mat{U_{\ell\ell} &\\&\Lambda}
+\label{eq:coeff_mat_eig_decomp}
+\end{equation}
+of the $(\ell+k)\times (\ell+k)$ (perturbed) Rayleigh-quotient.
+Note that the $\ell \times \ell$ block  $W_{11}$ is upper-triangular and
+\[
+U W_{11}=W_{11} U_{\ell\ell}
+\]
+ is an eigenvalue decomposition of  $U$.  We assume that the decomposition \eqref{eq:coeff_mat_eig_decomp} leaves the diagonal entries (eigenvalues) $u_{ii}$ of $U$ in the same order\footnote{Matlab's \texttt{eig} does this.}, so that 
+{\singlespacing
+\[
+\mat{U_{\ell\ell} &\\&\Lambda}
+=
+\mat{u_{11} \\%
+         &\ddots\\
+	&&u_{\ell\ell}\\
+	&&&\lambda_1\\
+&&&&\ddots\\
+&&&&&\lambda_k}.
+\]
+}
+
+Applying the eigen-basis $W=\mat{W_{11}&W_{12}\\&W_{22}}$ to \eqref{eq:simplifed_thick} from the right yields 
+\begin{equation}
+\H \mat{Z_1 & Z_2 } = 
+\mat{Z_1 & Z_2 }\mat{U_{\ell\ell} &\\&\Lambda} 
++  \mat{\Yh B  &  \Vdh F}\mat{W_{11}&W_{12}\\&W_{22}}. 
+\label{eq:thick_ritz_ROM}
+\end{equation}   
+where the Ritz-vectors 
+\[
+\mat{Z_1 & Z_2 } 
+= 
+\mat{Y&V} \mat{W_{11}&W_{12}\\&W_{22}} .  
+\]
+are separated into $Z_1$, associated with the locked-subspace $\Y$, and $Z_2$, the new Ritz-vectors generated on this cycle.  We want to determine which Ritz-vectors $z_j$ are converged and append them, as a Schur-basis, to $Y$ for the next cycle.  
+
+
+
+
+For $Z_1 = Y W_{11}$, \eqref{eq:thick_ritz_ROM} gives us
+\begin{equation}
+\H Z_1 = Z_1 U_{\ell\ell} + \Yh B W_{11}
+\label{eq:thick_ritz_Y}
+\end{equation}
+which is nothing new $\|\Yh B W_{11}\|=\|\Yh\|$, except to observe that we will need to translate \eqref{eq:thick_ritz_Y} to a relation that involves $\H_2 \neq \H$ and that justifies retaining the Schur-basis $Y$.
+
+For new Ritz-pairs $\lambda_j\in\Lambda$ and $z_j\in Z_2$, \eqref{eq:thick_ritz_ROM} implies
+\begin{equation}
+\begin{aligned}
+\H Z_2 - Z_2 \Lambda &=   \Yh B W_{12} + \Vdh  F W_{22}\\
+&= \mat{\Yh & \Vdh} \mat{B W_{12} \\F W_{22}}.
+\end{aligned}
+\label{eq:thick_ritz_V}
+\end{equation}
+
+
+
+\paragraph{Returning to a Schur-decomposition}
+Suppose we are keeping $k^\prime\leq k$ Ritz-values and we  rearranged and truncated the eastern part of \eqref{thick_eig_decomp} (corresponding to $\Lambda$).  
+
+Recall that $W_{11}$ is upper-triangular, and $W_{22}$ is not triangular in general. 
+If we take the  Schur-decomposition 
+\[
+W_{22} S = S T
+\]
+where $S$ is orthonormal and $T$ is upper-triangular.  The
+larger Schur-decomposition 
+\begin{equation}
+\mat{W_{11}&W_{12}\\&W_{22}}\mat{I&\\ &S} 
+=
+\mat{I&\\ &S} \mat{W_{11} &W_{12}S\\&T}
+\label{eq:thick_schur_eigen}
+\end{equation}
+follows.  Then applying $\mat{I&\\ &S}$  to \eqref{eq:simplifed_thick} yields 
+\begin{equation}
+\H \mat{Y &V S } =  \mat{Y & V S}
+\mat{U & G S \\ &T} +  \mat{\Yh B & \Vdh F S}.
+\label{eq:simplifed_thick_deflated_schur}
+\end{equation}    
+
+
+
+
+\paragraph{Returning to a Schur-decomposition via QR decomposition}
+if we take the $QR$ factorization  
+\begin{equation}
+W_{22} = Q T
+\label{eq:thickQR}
+\end{equation}
+where $Q$ is orthonormal and $T$ is upper-triangular then the larger $QR$ factorization
+\[
+\mat{W_{11}&W_{12}\\&W_{22}} = \mat{I&\\&Q} \mat{W_{11} &W_{12}\\&T}.
+\]
+follows.
+
+Note that from \eqref{thick_eig_decomp} we have $\hat{H} W_{22} = W_{22} \Lambda$ so \eqref{eq:thickQR} implies that $Q$ is a Schur basis of $\hat{H}$, i.e.
+\[
+\hat{H} Q 
+=  Q \left(T \Lambda T^{-1}\right).
+\] 
+Then applying $\mat{I&\\&Q}$ to \eqref{eq:simplifed_thick} from the right yields the Krylov-Schur relation
+\begin{equation}
+\H \mat{Y &VQ } =  \mat{Y & V Q}
+\mat{U & G Q \\ &U^\prime} +  \mat{\Yh B & \Vdh F Q},
+\label{eq:simplifed_thick_deflated_qr}
+\end{equation}    
+where $U^\prime = T \Lambda T^{-1}$ is upper-triangular so now we have an updated Schur representation  
+ \begin{equation}
+\H Y_2 =  Y_2 U_2 + \Yh_2 B_2
+\end{equation}
+of the locked subspace $\Y_2=\spn Y_2$.
+
+\end{comment}  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\clearpage
+\subsection{Intermediate ROM from a thick-restarted band-Arnoldi process}
+The following describes how we can form an intermediate ROM via implicit-projection cheaply in order to observe convergence of the model.
+  
+Recall that the band-Arnoldi algorithm 
+\begin{equation}
+\mat{V & \Himp & \rrimp} = \bA(\H,\RR)
+\label{eq:bAalg}
+\end{equation}
+where $\Himp = \c{V}\H V$ and $\rrimp = \c{V} \RR$, is the ROM approximation via implicit-projection 
+\begin{equation}
+\tfimp(s) = (\CC^T V)\big( I - (s-\sigma) \Himp \big)^{-1} \underbrace{(\c{V}\RR)}_{\rrimp}
+\label{eg:bA_tfimp}
+\end{equation}
+to the URM transfer-function 
+\begin{equation*}
+\tf(s) = \CC^T\big( I - (s-\sigma) \H \big)^{-1}\RR. 
+\end{equation*}
+For simplicity let us assume we will augment, or ``thicken'' the start block of the band-Arnoldi process with a basis $Y$ for an \emph{exactly} $\H$-invariant-subspace, so that $\H Y = Y U$.  
+
+Then the thick-started process
+\begin{equation}
+\mat{V & \Himp & \rrimp} = \bA(\H,\mat{Y &\RR})
+\label{eq:thick_bAalg}
+\end{equation}
+yields 
+\begin{equation*}
+V = \mat{Y&V^\prime}, \quad \Himp = \mat{U&G\\&\Himp^\prime},   
+\quad\text{and}\quad
+\rrimp = \c{\mat{Y&V^\prime}}\mat{Y &\RR} = \mat{\rrimp_1 & \rrimp_2}
+\end{equation*}
+Note that $\rrimp_2 = \c{\mat{Y&V^\prime}} \RR$, so the implied ROM transfer-function
+ \begin{equation}
+\tfimp(s) = \left( \CC^T\mat{Y&V^\prime} \right)
+\bigg( I - (s-\sigma) \Himp \bigg)^{-1} \underbrace{\left(\c{\mat{Y&V^\prime}}\RR \right) }_{\rrimp_2}
+\label{eg:thick_bA_tfimp}
+\end{equation}
+makes use of only $\rrimp_2$ rather than all of $\rrimp$, and  $\rrimp_1 = \mat{I\\0}$ is left out. 
+ 
+\clearpage
+\section{Proposing a new model-reduction method}\label{sec:new_method}
+Our restarted ROM method can described as a multiple-shift method with invariant-subspace recycling.   We construct a basis for a Krylov-subspaces at a (potentially) different shift on every cycle.  The thick-restart mechanism allows us to hold on to a growing basis $Y$ of known converged $(\A,\E)$-invariant-subspace, and continue orthogonalizing new basis vectors against $Y$.  Assuming $Y_0 = \{\}$ and $\ell_j = \dim Y_{j-1}$, the general process is 
+\begin{enumerate}
+\item For $j=1,2,\ldots,\np$, use Krylov-operator $\H_j = (\A-\sigma_j \E)^{-1}\E$ and operand $\RR_j= (\sigma_j \E - \A)^{-1}\BB$. 
+\begin{enumerate}
+\item \textbf{Expand} $Y_{j-1}$ into basis $\mat{Y_{j-1} & V_j}$ for $\Y_{j-1} \cup \krylov{n_j}{\H_j}{\RR_j}$ via $\ell_j+m$ iterations of thick-start Arnoldi process.  
+
+\item  The computed quantities $\rrimp_2 =\c{\Vt_j} \RR_j$ and $\Himp = \c{\Vt_j} \H_j \Vt_j$ can be used to \textbf{observe} the ROM transfer-function 
+\[
+\tfimp_j(s)=\CC^T \Vt_j \big( I - (s-\sigma_j) \Himp \big)^{-1} \rrimp_2
+\]
+ of \eqref{eg:thick_bA_tfimp} via implicit-projection on to the basis $\Vt_j = \mat{Y_{j-1} & V_j}$.
+
+\item \textbf{Deflate} $\mat{Y_{j-1} & V_j}$ into $\mat{Y_{j-1} &Y^\prime_j}$, where       $Y^\prime_j\subset\spn V_j$ is newly converged $(\A,\E)$-invariant-subspace, and set $Y_j = \mat{Y_{j-1} &Y^\prime_j}$. 
+\end{enumerate}
+
+\item Now we have a set of orthogonal blocks $\{ V_1, V_2, ...,V_\np\}$ (but not orthogonal to each other) such that 
+\[
+\spn \mat{V_1& V_2& \cdots&V_\np} = \bigcup_{j=1}^\np \krylov{n_j}{\H_j}{\RR_j}.
+\] 
+
+Let $\widehat{V} = \spn\mat{V_1& V_2& \cdots&V_\np}\in\R^{N\times n}$  (most-likely split into $\Re$ and $\Im$ parts and re-orthogonalized). The explicitly-projected ROM realization is then 
+\[
+\A_n = \widehat{V}^T \A \widehat{V},\quad 
+\E_n = \widehat{V}^T \E \widehat{V}, \quad
+\BB_n = \widehat{V}^T \BB,\quad
+\CC_n = \widehat{V}^T \CC,
+\]
+and it has transfer-function 
+\[
+\tfexp(s) = \CC_n^T (\A_n - s \E_n )^{-1} \BB_n. 
+\]
+\end{enumerate}
+
+Step 1 of the above outline is given as algorithm~\ref{alg:thick_barnoldi}. 
+
+\begin{algorithm}[htb]% note this is being handled by the algorithm2e package
+\DontPrintSemicolon
+\SetKwComment{tcp}{\% }{}
+\KwIn{System realization $(\A,\E,\BB,\CC)$, initial interpolation-point $\sigma_1\in\C$. }
+
+\BlankLine
+
+Set $Y_0 =\{\}, \Vrom=\{\}$, $m := \dim \BB$\;
+\For{$j = 1,2,\ldots$} {
+	Set $\ell_j := \dim Y_{j-1}$ \;
+	Let $\H_j := (\A-\sigma_j \E)^{-1}\E$ and $\RR_j := (\sigma_j \E -\A)^{-1}\BB$ \; 
+      Compute $\left( V ,  \Vh, \Vd, \Himp, \rrimp \right) := \bA\left(1:\ell_j,\H_j,\mat{Y_{j-1} &\RR_j}\right)$.\;
+\tcp{manually set candidates resulting from processing $Y_{j-1}$, to zero.} 	
+Set: $\vh_i := 0$, for $i = \ell_j + m + (1,2,...,\ell_j)$ 
+\BlankLine	
+      Continue $\left( V ,  \Vh, \Vd, \Himp, \rrimp \right) := \bA\left(\ell_j + 1:n_j ,\H_j,\mat{Y_{j-1} &\RR_j}\right)$.\;
+	Set $\Vrom:= \mat{\Vrom & V_{\RR_j}}$, where $V = \mat{v_1&v_2& \cdots& v_\ell & V_{\RR_j}}$. 
+      \BlankLine
+	\tcp{The $j$-th implicitly projected ROM transfer-function is given by \eqref{eg:thick_bA_tfimp}.}	
+      \BlankLine	
+Take eigen-decomposition $\Himp W = W \Lambda$. The corresponding poles are $\mu_i = \sigma_j+1/\lambda_i$. Convergence of a Ritz-pair $(\lambda_i,z_i)$ where $z_i = \mat{Y &V} w_i$ is given by \eqref{eq:resid_estimate2}. \; 
+\BlankLine
+       Compute pole-weights $\gamma_1,\gamma_2,\ldots,\gamma_{n_j}$ as \eqref{eq:pole_weight} and \eqref{eq:pole_wt_delta}.\;
+\BlankLine
+	Let $Z_j$ consist of converged Ritz-vectors and those with large relative-weight $|\gamma_i|/\Sigma |\gamma_i|$.\; 
+      Let $(Y_j ,T_j) := QR(\mat{Y_{j-1} & Z_j})$\; 
+\BlankLine
+	 Select new interpolation-point $\sigma_{j+1}$.  \label{line:select_point}\;
+}
+\BlankLine
+
+\BlankLine
+\KwOut{Basis $\Vrom$ for $\bigcup_j  \krylov{n_j}{\H_j}{\RR_j}$.} 
+\caption{{\sc Explcit thick-restarted Band-Arnoldi cycle}}
+\label{alg:thick_barnoldi}
+\end{algorithm}
+The explicit thick-restarted Band-Arnoldi algorithm is given as algorithm~\ref{alg:thick_barnoldi}. It consists of restarting the band-Arnoldi algorithm  (algorithm~\ref{alg:barnoldi}) with a basis of Ritz-vectors and setting to zero the candidate vectors resulting from processing those Ritz-vectors.   We experimented with allowing the Ritz-vectors to be processed normally, but it requires more computation and generally resulted in a less accurate ROM for a given size.  In practice (for large $N$), we would not process $Y_{j-1}$ explicitly (perform  steps 5 and 6 of algorithm~\ref{alg:barnoldi}).  We would perform an implicit-restart method like Krylov-Schur\cite{stewart2002krylov}, by pre-loading $V$ with the already orthogonal-basis $Y_{j-1}$ and    $\Himp$ with $U_{j-1} = T_{j-1} \Lambda_j  T_{j-1}^{-1}$.
+
+Selection of a new interpolation-point (line \ref{line:select_point}) is left up to whatever method the user chooses; given that we have fairly cheap access to pole distribution data for the implicit ROM transfer-function at any iteration, we assume a point-selection method will take advantage of that.  An example of a  simple adaptive method is to choose $\sigma_{j+1}$ to be close to the location of the un-converged pole with largest weight.  That would be something like   
+\[
+\sigma_{j+1}=\Im(\mu_\tau)
+\]
+ where $\tau=\text{argmax}_i|\gamma_i|$ the un-converged pole with largest weight.
+\clearpage
+
+\section{Results}
+Due to time constraints we limit our numerical results to a few examples of the method at work on two test models.  \texttt{ex308} and \texttt{ex1841} approximated at a single interpolation-point.  
+We recorded the number of iterations of bArnoldi required to reach a relative transfer-function error 
+\begin{equation}
+\frac{\|\tf-\tfimp\|}{\| \tf \|}\leq \texttt{tf\_tol} =  0.01,
+\label{eq:tfunc_rel_err}
+\end{equation}
+ at each of three points that are canonical in some sense.    Those are a real point $\pi 10^{10}$,  the $\Im$-point $\pi i 10^{10}$ located roughly at the midpoint of the segment of interest, and the complex point $(1+i)\pi 10^{10}$, shown in figure~\ref{fig:3points}.
+  The resulting ROM size in each case depends on the dimension of the split-Krylov-subspace 
+\[
+\krylov{n^\prime}{\H}{\RR}^* 
+= \krylov{n}{\H}{\RR} \cup \krylov{n}{\conj{\H}}{\conj{\RR}},
+\]
+so the dimension $n^\prime$ of the ROM explicitly-projected onto a real basis is no larger than $n$.  If no deflation occurred during re-orthogonalization of conjugate parts of the projection basis, then $n^\prime = 2n$ and that was typical for our experiments. 
+
+\begin{figure}
+\centering
+\putfig{1}{3points.png}
+\caption{\label{fig:3points} The three interpolation-points used for single point benchmarks. The segment of interest $[10^9,10^{10}]i$ on the $\Im$-axis, is highlighted.  Note how small $[0,10^9]$ is, in comparison.  }
+\end{figure}
+
+We will give a count of floating-point operations (flops) for producing ROMS.  We consider flop-counts to be scalar products in $\R^n$, so when complex arithmetic is being used ($\sigma\notin\R$) we must multiply the count by 4.  Band-Arnoldi run for $n$-iterations with a constant band-size of $m_c=m$ requires approximately
+\[
+\texttt{bA\_count}(n) = n N^2 + N (n)(n-1)/2 + N m n 
+\]
+flops.   That is  $n N^2$ flops for $n$-matrix-vector products, $N (n)(n-1)/2$ flops for orthogonalization of $1+2+\cdots+n$ basis vectors, and $N m n$ flops for orthogonalization of $m$ candidate-vectors at each iteration.   
+
+We include the flop count for tests because we wish to reduce this number using restarts, even if the ROM dimension itself is not appreciably smaller.    We would like that for $l$ cycles of band-Arnoldi, each run for $n_j$ iterations, 
+\[
+  l M +\sum_j \texttt{bA\_count}(n_j)    
+  <   M + \texttt{bA\_count}\left(\sum n_j \right)
+\]
+$M$ represents the cost of factoring or (re)forming $\H_j$ and $\RR_j$ which, for a restarted method, must be done $l$ times (for each $j=1,2,...,l$).  It only needs to be done once for a single-point method. We do not have a value for $M$  because it varies with the application.  It may be negligibly small or prohibitively large, and depends on the size and sparsity of the model realization $(\A,\E,\BB,\CC)$. 
+
+\subsection{ex308}
+\texttt{ex308} is a $2\times2$  MIMO model of a RCL circuit with 2 input and 2 output terminals,  that comes from from a test problem for PEEC modelling of interconnect from IBM or Carnegie Mellon University.   
+\texttt{ex308} is characterized by many poles very near the $\Im$-axis, giving its transfer-function gain a spiked appearance.
+ 
+\subsubsection{ex308 Benchmarks}
+   Benchmark data for \texttt{ex308} is given in table~\ref{tab:308tab1}.  
+
+ROM size (projection basis dimension) is given as the dimension $n^\prime$ of the real basis $V_{\text{ROM}}$ obtained by splitting and re-orthogonalizing $\widehat{V}$.  ``LI'' is a linear-independence measure defined as 
+\[\text{LI}\left(V_{\text{ROM}}\right) =
+\frac{\text{rank}_\text{eff}\left(V_{\text{ROM}}\right)}{n}
+\]  
+where $\text{rank}_\text{eff}$ is the ``effective-rank'' of $V_{\text{ROM}}$ as determined by Matlab.  We expect the restarted method to produce a less ``effectively'' linearly-independent basis. 
+ 
+\begin{table}{H}
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|c|}
+\hline
+$\sigma$ & iterations ($n$) & ROM size ($n^\prime$) & LI  & rel-err  & flops & figure  \\
+\hline
+$\pi 10^{10}$  & 144  &144 & 1 &7.368e-05   &  16,920,288 + M& \ref{fig:308benchmark1}  \\
+$i \pi  10^{10}$ &  71 &142 & 0.992958 &5.913e-4 & 30,177,840 + M  &\ref{fig:308benchmark2} \\
+$(1+i)\pi 10^{10}$ & 97 & 194& 0.793814&5.1713e-3 &  42,782,432 + M&\ref{fig:308benchmark3} \\
+\hline
+\end{tabular}
+\caption{\label{tab:308tab1}Benchmark data for \texttt{ex308}.  flops is a count of real (in $\R$), non-zero scalar products required for matrix-vector multiplication and inner-products.    }
+\end{table}
+
+
+
+\begin{figure}
+\putfig{1}{ex308FR_all.png}
+\caption{\label{fig:ex308FR_all} These are the three unique gain plots for \texttt{ex308}. }
+\end{figure}
+
+
+\begin{figure}
+\putfig{1}{308polesn250.png}
+\caption{\label{fig:308polesn250} This is a plot of relative-residual errors for the 250 poles of an $n=250$ ROM (about $\sigma=(1+i)\pi 10^{10}$) of \texttt{ex308}.  The circles are the poles derived from eigenvalues of $\Himp=\c{V}\H V$ (the implicit ROM), and the dots are the eigenvalues of the explicitly-projected matrix pencil $(\A_n,\E_n) = (\c{V}\A V, \c{V}\E V)$ (the explicit ROM).   These are different sets of poles for the most part, except that they converge to the same set of eigenvalues of $(\A,\E)$ as $n$ increases.   We can expect the two ROMs to share \emph{converged} poles.  In practice, only the implicit ROM poles (the circles) will be available because relative residual norms are cheap to compute for Ritz-values from $\Himp$.   Computing eigen-pairs $(\mu,z)$ of $(\A_n,\E_n)$ would require an expensive explicit-projection and there is no cheap formula like     \eqref{eq:ritz_resid_bound1} for the residual norm $\| \A z - \mu \E z \|$. }
+\end{figure}
+\smallskip
+
+
+
+\begin{figure}[htbp]
+\centering
+\putfig{1}{308err_vs_n_s0real.png}
+
+\putfig{1}{308poles_s0real.png}
+\caption{\label{fig:308benchmark1} Transfer-function relative-error \eqref{eq:tfunc_rel_err} (of explicitly-projected ROM) and ROM weight (of the implicitly projected ROM) vs. $n$ for \texttt{ex308}, at real interpolation-point $s_0 = \pi 10^{10}\in\R$, indicated by `$\times$'.     The dotted line in the first plot  represents a relative-error of $0.01$.   \texttt{ex308} is characterized by a dense distribution of poles on or very near the $\Im$-axis, which is evident from the pole distribution of the implicitly defined ROM transfer-function at 148 iterations.  That particular ($n=148$) ROM implies a ROM via \emph{explicit} projection with relative transfer-function error $\approx 10^{-8}$. }
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.8}{308err_vs_n_s0imag.png}
+\putfig{.8}{308fullerr_vs_n_s0imag.png}
+\caption{\label{fig:308benchmark2} Transfer-function relative-error and ROM weight vs. $n$ for \texttt{ex308}, at $\Im$ interpolation-point $s_0 = i \pi\cdot10^{10}\in i \R$.   Unfortunately it appears that ROM weight is not
+a consistently reliable indicator of transfer-function convergence when using a single interpolation-point.   In this example it looks like ROM weight converges after about 30 iterations and after that, only its distribution changes. It is also possible that there is one very dominant pole that appears at $n=30$ and it remains one pole as it converges to its resting position.
+The second plot is relative (explicit) ROM error over iterations $1,2,\ldots,160$.  This plot gives a sense of localized convergence of the transfer-function.  Since the single interpolation-point is placed near the center of the segment of interest, we see that the transfer-function approximation is most accurate (dark region indicates rel-error is less than $0.01$) near the center and convergence works outward from there.}
+\end{figure}
+
+\begin{figure}
+\putfig{1}{308err_vs_n_s0cplx.png}
+\caption{\label{fig:308benchmark3} Transfer-function relative-error and ROM-weight vs. $n$ for \texttt{ex308}, at $\sigma = (1+i)\pi\cdot10^{10}$.   This is much the way we would like the relationship between ROM-weight and transfer-function error to look.    ROM-weight leveling-off would indicate transfer-function error convergence.}
+\end{figure}
+
+\clearpage
+
+\subsubsection{ex308 thick-restart example 1}
+Here we show an example run of the thick-restarted band-Arnoldi process using three pre-set interpolation-points $\sigma_j = 10^8 + 2\pi i \cdot 10^{10} p_j$ for   $p_j =2, 3.5, 6$.  When scaled this way, the frequency range of interest $p\in (1,10)$ corresponds to $s\in i(10^9,10^{10})$ so our choices of $p$ suggest convergence of the frequency-response at those localities first, and outward from there.      We ran the algorithm for  for $n_j=20,25,25$ iterations. 
+
+ Converged Ritz-vectors (those with relative residual less than $\texttt{ctol}=\sqrt{\epsilon}\approx \texttt{1.49e-8}$) and those associated with dominant poles ($\texttt{wt}_i/\sum\texttt{wt}_i\leq 0.05$) were recycled.  
+   
+
+The resulting ROM required a total of $70$ iterations (not including re-processing thick-restarting Ritz-vectors), was of size  $n^\prime=140$ and had a relative-error of $\texttt{7.14155e-05}$, making it compare favorably with the benchmark examples in table \ref{tab:308tab1}.   It required $30,217,264 + 3M$ flops, where $M$ is the cost of creating $\H_j$ and $\RR_j$.   
+
+Execution of  \texttt{test4('ex308',1e8+2i*pi*1e9*[2 3.5 6],[20 25 25])} yields
+
+{\singlespacing
+\begin{verbatim}
+cycle 1 expanding at s_0 = 2\pi10^9(0.0159155 + 2i),  band_size = 2 + 0 
+... ROM: 20, n_tot: 20,   converged: 1,   keep: 2  weight: 154591
+...updating thick-restart basis...dim Y = 2 
+\end{verbatim}
+}
+\putfig{.7}{308_test1_poles1.png}
+
+In the above plot, poles of the implicitly projected ROM of the first cycle are indicated by `$*$' symbols.  The color of a pole indicates its degree of convergence.  The interpolation-point is indicated by `$\times$', and a dashed-circle\footnote{elongated in the plot due to greatly asymmetric scaling.  This is one reason why interpolation-points on or near the $\Im$-axis can result in the convergence of unnecessarily large ROMs.} around the interpolation-point indicates distance to the first converged pole.  The `$\star$' symbol indicates placement of the next interpolation-point.    Pole-size in the plot corresponds to weight.  Some poles have circles around them, indicating that those will be kept for thick-restarting the next cycle.    In this example we are lucky to have had a very dominant pole among the two that converged on the first cycle.    
+
+
+
+{\singlespacing
+\begin{verbatim}
+cycle 2 expanding at s_0 = 2\pi10^9(0.0159155 + 3.5i),  band_size = 2 + 2 
+v_defl(5)/H_est  = 0 < 1.49012e-08, 	 mc = 3
+v_defl(5)/H_est  = 0 < 1.49012e-08, 	 mc = 2
+... ROM: 27, n_tot: 45,   converged: 4,   keep: 4  weight: 629018
+...updating thick-restart basis...dim Y = 4
+\end{verbatim}
+}
+\putfig{.8}{308_test1_poles2.png}
+
+{\singlespacing
+\begin{verbatim}
+cycle 3 expanding at s_0 = 2\pi10^9(0.0159155 + 6i),  band_size = 2 + 4 
+v_defl(7)/H_est  = 0 < 1.49012e-08, 	 mc = 5
+v_defl(7)/H_est  = 0 < 1.49012e-08, 	 mc = 4
+v_defl(7)/H_est  = 0 < 1.49012e-08, 	 mc = 3
+v_defl(7)/H_est  = 0 < 1.49012e-08, 	 mc = 2
+... ROM: 29, n_tot: 70,   converged: 6,   keep: 8  weight: 0.00604195
+...updating thick-restart basis...dim Y = 8
+\end{verbatim}
+}
+\putfig{.8}{308_test1_poles3.png}
+
+
+
+\begin{table}
+\centering
+\subfloat[Cycle 1]{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+&$\Re(\mu)$ & $\Im(\mu)$ &\texttt{rr} & wt & keep \\ 
+ \hline 
+1 & \texttt{-2.3746e+07} &  \texttt{1.2186e+10}i & 3.6646e-11 & 0.0138714 & 1 \\
+\rowcolor[gray]{.95} 2 & \texttt{4.8802e+01} &  \texttt{1.1562e+10}i & 1.75228e-07 & 154560 & 1 \\
+3 & \texttt{-1.2457e+08} &  \texttt{1.3997e+10}i & 5.15493e-05 & 0.0166039 & 0 \\
+4 & \texttt{-3.2363e+08} &  \texttt{1.0214e+10}i & 0.000147586 & 0.0136769 & 0 \\
+5 & \texttt{-1.7281e+09} &  \texttt{1.4688e+10}i & 0.00067386 & 0.0223279 & 0 \\
+6 & \texttt{-2.6226e+07} &  \texttt{1.4295e+10}i & 0.000702401 & 0.0122022 & 0 \\
+7 & \texttt{-9.2396e+05} &  \texttt{1.4978e+10}i & 0.00092006 & 14.3325 & 0 \\
+8 & \texttt{1.2915e+05} &  \texttt{1.4334e+10}i & 0.00126677 & 1.344 & 0 \\
+9 & \texttt{-2.5567e+08} &  \texttt{8.3294e+09}i & 0.00515879 & 0.0234752 & 0 \\
+10 & \texttt{4.1068e+06} &  \texttt{9.6085e+09}i & 0.0136536 & 0.503765 & 0 \\
+\hline
+\end{tabular}
+}
+
+\subfloat[Cycle 2]{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+&$\Re(\mu)$ & $\Im(\mu)$ &\texttt{rr} & wt & keep \\ 
+ \hline 
+1 & \texttt{-2.3746e+07} &  \texttt{1.2186e+10}i & 0 & 0.0110811 & 1 \\
+\rowcolor[gray]{.95} 2 & \texttt{1.9498e+02} &  \texttt{1.1562e+10}i & 0 & 44474.2 & 1 \\
+3 & \texttt{-1.0463e+07} &  \texttt{2.1391e+10}i & 3.12586e-09 & 0.151564 & 1 \\
+\rowcolor[gray]{0.8} 4 & \texttt{1.1927e-01} &  \texttt{2.2714e+10}i & 7.41398e-09 & 567340 & 1 \\
+5 & \texttt{-6.6011e+07} &  \texttt{2.2864e+10}i & 4.3831e-08 & 0.013322 & 0 \\
+6 & \texttt{-4.9619e+00} &  \texttt{2.1332e+10}i & 2.98909e-07 & 11524.3 & 0 \\
+7 & \texttt{5.1626e+00} &  \texttt{2.1293e+10}i & 2.11094e-06 & 834.36 & 0 \\
+8 & \texttt{-8.2289e+08} &  \texttt{2.0635e+10}i & 1.2973e-05 & 0.0239924 & 0 \\
+9 & \texttt{-4.4901e+01} &  \texttt{2.0682e+10}i & 3.32799e-05 & 4827.55 & 0 \\
+10 & \texttt{-2.8524e+07} &  \texttt{2.3487e+10}i & 6.76036e-05 & 0.0287073 & 0 \\
+\hline
+\end{tabular}
+}
+
+\subfloat[Cycle 3]{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+&$\Re(\mu)$ & $\Im(\mu)$ &\texttt{rr} & wt & keep \\ 
+ \hline 
+1 & \texttt{-2.3746e+07} &  \texttt{1.2186e+10}i & 0 & 3.06212e-08 & 1 \\
+\rowcolor[gray]{0.8} 2 & \texttt{4.9552e+00} &  \texttt{2.2714e+10}i & 0 & 6.69624e-09 & 1 \\
+3 & \texttt{-1.0463e+07} &  \texttt{2.1391e+10}i & 0 & 5.41799e-08 & 1 \\
+\rowcolor[gray]{.95} 4 & \texttt{-2.4655e+02} &  \texttt{1.1562e+10}i & 0 & 1.49686e-07 & 1 \\
+5 & \texttt{-4.3476e+06} &  \texttt{3.7641e+10}i & 5.19823e-23 & 1.98325e-08 & 1 \\
+6 & \texttt{-5.1591e+08} &  \texttt{3.7457e+10}i & 2.15413e-14 & 2.57324e-07 & 1 \\
+7 & \texttt{-1.2248e+00} &  \texttt{3.5908e+10}i & 3.04755e-08 & 4.08767e-07 & 0 \\
+8 & \texttt{-3.5711e+00} &  \texttt{3.9570e+10}i & 4.79573e-07 & 5.11497e-08 & 0 \\
+9 & \texttt{-2.8146e+07} &  \texttt{4.0486e+10}i & 3.09744e-06 & 8.83886e-08 & 0 \\
+10 & \texttt{-3.6394e+04} &  \texttt{3.9670e+10}i & 3.63502e-06 & 3.98871e-09 & 0 \\
+\hline
+\end{tabular}
+}
+\caption{\label{tab:308test1} The 10 Ritz-poles of lowest relative-residual for each cycle. One thing to note is that  pole-weight does not stay consistent from cycle to cycle for this test.  Two converged poles (indicated by shaded rows in the tables)  appear to change dominance quite drastically.   This could be due to the way we define pole-weight. }
+\end{table}
+
+\clearpage
+\begin{figure}
+\centering
+\putfig{.7}{308_test1_poles_exp.png}
+\putfig{.9}{308_test1_fire.png}
+\caption{\label{fig:308test1_tfunc} The pole distribution for the explicitly-projected transfer-function and interpolation-points are in the first plot.  The second plot, of local transfer-function-error over the frequency range of interest  evolving with inclusion of basis vectors in $V_\text{ROM}$ reflects expansion about the points $p=2$, $3.5$, and $6$.   It appears that a smaller and more accurate ROM could have been constructed with fewer iterations at $p=2$ and more iterations at $p=6$, or possibly two more interpolation-points at $p=5$ and $8$. We found the $\texttt{1e8}$ offset from the $\Im$-axis to yield good results in numerous test-runs of the process for this example.  }
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.5}{308_test1_exp_FR.png}
+\putfig{.8}{308_test1surf.png}
+\caption{\label{fig:308test1_tfunc} Plots of the $(1,2)$ component of the frequency-response and transfer-function surface for example 1.  It looks like the interpolation-point placement was almost ideal for \texttt{ex308}, in the sense that the points are near centers of pole-mass.   Note that the interpolation-points are actually offset \texttt{1e8} into the $\Re$ half-plane, but the scale of the surface plot is such that they appear to be on the segment of interest.    }
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{1}{308_test1_svd3.png}
+\caption{Here we looked at relative-error for explicitly-projected ROM transfer-functions for successively larger bases $U_n$ for $n=1,2,\ldots,n^\prime = 140$, 
+where $U$ is the basis of left singular-vectors of $\widehat{V}$, and $\sigma$ is the corresponding singular value.
+}
+\end{figure}
+
+
+\clearpage
+\subsubsection{ex308 thick-restart example 2}
+The next test is similar to the previous one except that we did not keep any Ritz-vectors from cycle to cycle.   In this case the model  of size $n^\prime = 140$ had about the same accuracy at  with a relative transfer-function error of $\texttt{2.84772e-05}$.  It was negligibly cheaper to construct at $27,707,680 + 3M$ flops.   There was very little overlap between Krylov-subspaces in this case, possibly because of the low number of iterations we performed.    
+\begin{figure}
+\centering
+\putfig{.9}{308_test2_svd3.png}
+\caption{\label{fig:308_test2_svd3} Transfer-function relative error for \texttt{ex308} test 2,  plotted in order of decreasing singular values.  The condition number of the split basis in this case is \texttt{1.5384e13}, which is not much different from that from test 1, indicating that keeping Ritz-vectors did improve linear independence of the projection basis, but not by much.  }
+\end{figure}
+
+\begin{table}
+\centering
+\subfloat[Cycle 1]{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+&$\Re(\mu)$ & $\Im(\mu)$ &\texttt{rr} & wt & keep \\ 
+ \hline 
+1 & \texttt{-2.3746e+07} &  \texttt{1.2186e+10}i & 3.6646e-11 & 0.0138714 & 0 \\
+2 & \texttt{4.8802e+01} &  \texttt{1.1562e+10}i & 1.75228e-07 & 154560 & 0 \\
+3 & \texttt{-1.2457e+08} &  \texttt{1.3997e+10}i & 5.15493e-05 & 0.0166039 & 0 \\
+4 & \texttt{-3.2363e+08} &  \texttt{1.0214e+10}i & 0.000147586 & 0.0136769 & 0 \\
+5 & \texttt{-1.7281e+09} &  \texttt{1.4688e+10}i & 0.00067386 & 0.0223279 & 0 \\
+6 & \texttt{-2.6226e+07} &  \texttt{1.4295e+10}i & 0.000702401 & 0.0122022 & 0 \\
+7 & \texttt{-9.2396e+05} &  \texttt{1.4978e+10}i & 0.00092006 & 14.3325 & 0 \\
+8 & \texttt{1.2915e+05} &  \texttt{1.4334e+10}i & 0.00126677 & 1.344 & 0 \\
+9 & \texttt{-2.5567e+08} &  \texttt{8.3294e+09}i & 0.00515879 & 0.0234752 & 0 \\
+10 & \texttt{4.1068e+06} &  \texttt{9.6085e+09}i & 0.0136536 & 0.503765 & 0 \\
+\hline
+\end{tabular}
+}
+
+\subfloat[Cycle 2]{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+&$\Re(\mu)$ & $\Im(\mu)$ &\texttt{rr} & wt & keep \\ 
+ \hline 
+1 & \texttt{-1.0463e+07} &  \texttt{2.1391e+10}i & 3.15983e-09 & 0.151564 & 0 \\
+2 & \texttt{1.3560e-01} &  \texttt{2.2714e+10}i & 7.5411e-09 & 559182 & 0 \\
+3 & \texttt{-6.6011e+07} &  \texttt{2.2864e+10}i & 4.42028e-08 & 0.013322 & 0 \\
+4 & \texttt{-2.4243e-02} &  \texttt{2.1332e+10}i & 3.18392e-07 & 67080.5 & 0 \\
+5 & \texttt{4.2240e+00} &  \texttt{2.1293e+10}i & 2.25896e-06 & 984.276 & 0 \\
+6 & \texttt{-8.2289e+08} &  \texttt{2.0635e+10}i & 1.3741e-05 & 0.0239923 & 0 \\
+7 & \texttt{-9.0853e+02} &  \texttt{2.0682e+10}i & 3.62199e-05 & 243.656 & 0 \\
+8 & \texttt{-2.8524e+07} &  \texttt{2.3487e+10}i & 6.645e-05 & 0.0287091 & 0 \\
+9 & \texttt{-1.3230e+06} &  \texttt{2.0649e+10}i & 7.29665e-05 & 0.0201709 & 0 \\
+10 & \texttt{-7.5781e+07} &  \texttt{1.9234e+10}i & 0.0017068 & 0.0163881 & 0 \\
+\hline
+\end{tabular}
+}
+
+\subfloat[Cycle 3]{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+&$\Re(\mu)$ & $\Im(\mu)$ &\texttt{rr} & wt & keep \\ 
+ \hline 
+1 & \texttt{-4.3476e+06} &  \texttt{3.7641e+10}i & 5.23777e-23 & 2.51929e-08 & 0 \\
+2 & \texttt{-5.1591e+08} &  \texttt{3.7457e+10}i & 2.16358e-14 & 3.26875e-07 & 0 \\
+3 & \texttt{-2.2323e+00} &  \texttt{3.5908e+10}i & 3.06443e-08 & 5.1925e-07 & 0 \\
+4 & \texttt{-5.0044e+00} &  \texttt{3.9570e+10}i & 4.83015e-07 & 6.49747e-08 & 0 \\
+5 & \texttt{-2.8146e+07} &  \texttt{4.0486e+10}i & 3.1165e-06 & 1.12279e-07 & 0 \\
+6 & \texttt{-3.6431e+04} &  \texttt{3.9670e+10}i & 3.65723e-06 & 5.06681e-09 & 0 \\
+7 & \texttt{2.2037e+03} &  \texttt{4.0796e+10}i & 0.000200954 & 5.49435e-09 & 0 \\
+8 & \texttt{4.6830e+04} &  \texttt{3.3983e+10}i & 0.000950016 & 1.14312e-07 & 0 \\
+9 & \texttt{-3.9908e+06} &  \texttt{4.3477e+10}i & 0.0023368 & 1.45873e-07 & 0 \\
+10 & \texttt{-7.1975e+06} &  \texttt{3.3975e+10}i & 0.0024024 & 5.09175e-09 & 0 \\
+\hline
+\end{tabular}
+}
+\caption{\label{tab:308test2} Here are the most converged eigenvalues of each cycle of the same example, except that we kept no Ritz values from cycle to cycle.}
+\end{table}
+
+
+\clearpage
+\subsection{ex1841}
+%test4('ex1841',1e8+[4 5 7]*2i*pi*1e9,[22 35 42]);
+\texttt{ex1841} is a $16\times 16$ (inputs $\times$ outputs) MIMO model that comes from a MNA expression of an RCL circuit model of interconnect.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+$\sigma$ & iterations ($n$) & ROM size ($n^\prime$) & LI &rel-err  & flops & figure  \\
+\hline
+$\pi 10^{10}$  & 310 &310 & 1 & 9.1289e-3 &   1,147,983,165 + M& \ref{fig:1841benchmark1}  \\
+$i \pi  10^{10}$ &  106 & 212& 1 & 8.6730e-3 &  1,490,525,148 + M  &\ref{fig:1841benchmark2} \\
+$(1+i)\pi 10^{10}$ & 142 & 284& 1&  8.4797e-3 &  2,015,563,620 + M&\ref{fig:1841benchmark3} \\
+\hline
+\end{tabular}
+\caption{\label{tab:1841tab1}Benchmark data for \texttt{ex1841}.  flops is a count of real (in $\R$), non-zero scalar products required for matrix-vector multiplication and inner-products. }
+\end{table}
+
+
+
+\begin{figure}
+\centering
+\subfloat[\label{fig:1841benchmark1}$\sigma=\pi 10^{10}$ ]%
+	{\putfig{.8}{1841err_vs_n_s0real.png}}
+\vfill
+\subfloat[\label{fig:1841benchmark2}$\sigma=i \pi 10^{10}$  ]%
+	{\putfig{.8}{1841err_vs_n_s0imag.png}}
+\vfill
+\subfloat[\label{fig:1841benchmark3} $\sigma=(1+i)\pi 10^{10}$ ]%
+	{\putfig{.8}{1841err_vs_n_s0cplx.png}}
+\vfill
+\caption{\label{fig:1841benchmarks} Transfer-function relative-error \eqref{eq:tfunc_rel_err} and ROM weight vs. $n$ for \texttt{ex1841}, at each of the three points shown in figure~\ref{fig:3points}.    }
+\end{figure}
+
+
+\clearpage
+\subsubsection{ex1841 test1}
+We ran the thick-restarted band-Arnoldi algorithm for $20$ iterations at each of 5 interpolation points $10^3 + 2i p_j \cdot\pi\cdot10^9$, for $p_j = 1,3,5,7,9$.
+\begin{verbatim}
+test4('ex1841',1e3+[1 3 5 7 9]*2i*pi*1e9,[20 20 20 20 20]);
+\end{verbatim}
+
+The purpose of this test was to compare ROMs produced by restarted band-Arnoldi with and without ``thick-restarting'', i.e. keeping Ritz vectors.  For low iteration counts, the difference is almost negligible with this model, even when interpolation points are fairly closely located.
+
+\smallskip
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\texttt{keep\_tol} & $n$ &  $n^\prime$ & rel-error & flops & cond \# \\
+\hline
+0 & 100 & 200 &  0.0143945 &  1374490600 + 5M &  755711 \\
+$\infty$ & 100 & 200 &  0.0143945 & 4270751800 + 5M & 47639 \\
+\hline
+\end{tabular}
+\smallskip
+
+In fact, for this test the only differences in models are the operations required to produce them and the linear-independence of the basis vectors.
+
+\begin{figure}
+\centering
+\subfloat[keeping no Ritz-vectors, condition number: 755711  ]{
+\putfig{.8}{1841test_svd_nokeep.png} }
+
+\subfloat[keeping all Ritz-vectors, condition number: 47639 ]{
+\putfig{.8}{1841test_svd_allkeep.png} }
+\caption{singular values and relative transfer-function error for each ROM of test 1.}
+\end{figure}
+
+\begin{figure}
+\begin{tabular}{c|c|c}
+cycle &keep none ($\texttt{keep\_tol} =0$) & keep all ($\texttt{keep\_tol} =\infty$)\\
+\hline
+
+1 & \putfig{.5}{1841test_poles1_nokeep.png}
+&\putfig{.5}{1841test_poles1_allkeep.png}\\
+2 & \putfig{.5}{1841test_poles2_nokeep.png}
+&\putfig{.5}{1841test_poles2_allkeep.png}\\
+3& \putfig{.5}{1841test_poles3_nokeep.png}
+&\putfig{.5}{1841test_poles3_allkeep.png}\\
+\end{tabular}
+\end{figure}
+
+\begin{figure}
+\begin{tabular}{c|c|c}
+4 & \putfig{.5}{1841test_poles4_nokeep.png}
+&\putfig{.5}{1841test_poles4_allkeep.png}\\
+5 & \putfig{.5}{1841test_poles5_nokeep.png}
+&\putfig{.5}{1841test_poles5_allkeep.png}\\
+\end{tabular}
+\end{figure}
+
+
+
+
+
+\clearpage
+\subsubsection{Test-model MNA\_2}
+\begin{figure}
+\centering
+\subfloat[stepsize 2]{\putfig{1}{1841errors_step2.png}}
+
+\subfloat[stepsize 10]{\putfig{1}{1841errors_step10.png}}
+\caption{\label{fig:reldiff1}For very large test-models we did not have URM Frequency response data available so we 
+estimated relative-error with relative iterate-difference $\| \tfexp_n - \tfexp_{n-k} \| / \| \tfexp_n \|$ of consecutive implicit transfer-functions. Here we compare relative-error and relative-difference of explicit projection ROMs of $\texttt{ex1841}$, for step-sizes $k=2$ and $10$.  As far as we know, these comparisons are model independent.  We decided $k=10$ is a good-enough measure of relative-error.}
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{1}{MNA_2reldiff_step10.png}
+\caption{\label{fig:reldiff2}This plot of relative iterate-difference (we will always use stepsize $k=10$) for \texttt{MNA\_2} about expansion-point $\pi\cdot10^{10}$ indicates our estimate of its accuracy vs ROM size.  It requires a ROM of size about $n\approx 580$ to have an accuracy on the order of $\sqrt{\epsilon}\approx10^{-8}$. }
+\end{figure}
+\texttt{MNA\_2} is a MIMO ($18 \times 18$) circuit model of order $N=9223$ from the benchmark (test-model) collection \cite{chahlaoui2002collection}.  Its transfer function has $(18)(17)/2 = 153$ unique components.  Here we present surface plots for five of them: $\tf_{ij}$ for $(i,j) =  (1 ,1), (1 ,10),  (2 ,2), (8, 10), (5, 15)$.  These choices have no particular significance, although there may be relationships between components that could be exploited for further MIMO reduction.  For this test we considered the frequencies of interest to be $f\in[10^{8}, 10^{10}]$. 
+
+We ran our thick-restarted method for the following set of rational-interpolation parameters: 
+{\singlespacing
+\begin{tabular}{ccc}
+$j$ & $p_j$ & $n_j$\\
+\hline
+1 & $0.150354 + 1.43386i$ & 22 \\
+2 & $0.269667 + 9.03516i$ & 22\\
+3 & $-0.882785 + 5.4727i$ & 22\\
+4 & $0.165058 + 4.87005i$ & 22 \\
+5 & $-0.189358 + 8.58293i$ & 22\\
+6 & $-1.49645 + 8.00428i$ & 46 \\
+\end{tabular}
+}
+
+\medskip
+This means we performed restarts after $n_j$ iterations of band-Arnoldi with $\H(\xp_j)$, $\RR(\xp_j)$, where $\sigma_j = 2\pi10^9  p_j$ was the interpolation-point for the $j$-th cycle, for $j=1,2,...,6$.
+
+There were a total of $156$ iterations performed producing a ROM of order $n=312$.  The estimated relative-error was $\texttt{2.53015e-05}$.  We estimated relative-error by relative-difference as explained in figures~\ref{fig:reldiff1} and \ref{fig:reldiff2}. We set the Ritz-convergence tolerance relatively low, at $\texttt{ctol}=10^{-4}$.  Still, no Ritz-values converged on any cycle.  Basis-construction (before split and re-orthogonalize) took  $53264153112 + 6M$ flops, where $M$ is the cost of preparing $\H_j$ and $\RR_j$ for computation.   
+
+Figure~\ref{fig:reldiff2} illustrates that it requires a ROM of order $n\approx480$ to achieve an estimated relative-error on the order of $\texttt{1e-05}$ using a single, real interpolation point located at $\pi\cdot 10^{10},
+$\footnote{which would be near-optimal placement for a real interpolation point according to \cite{grimme97}} 
+we can improve upon it using rational-interpolation with an almost haphazardly-selected set of 5 interpolation-points. Our ROM is roughly ($312/480$) two-thirds the size of the original.  This is not a large reduction in model size, but some effort to optimize point placement could yield better improvements.   
+  
+\clearpage
+\subsubsection{ROM transfer-function gain plots for $\texttt{MNA\_2}$ example}
+Here we show gain plots for the five ROM transfer-function components.  The locations of the interpolation points are indicated by $*$ symbols.
+\begin{figure}[h]
+\centering
+\putfig{.5}{MNA2_FR_1_1.png}
+
+\putfig{.8}{MNA2_surf_1_1.png}
+\caption{\label{fig:MNA2_1_1} $(1,1)$ of $n=312$ ROM of  $\texttt{MNA\_2}$}
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.5}{MNA2_FR_1_10.png}
+
+\putfig{1}{MNA2_surf_1_10.png}
+\caption{\label{fig:MNA2_1_10} $(1,10)$ of $n=312$ ROM of  $\texttt{MNA\_2}$}
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.5}{MNA2_FR_2_2.png}
+
+\putfig{1}{MNA2_surf_2_2.png}
+\caption{\label{fig:MNA2_2_2} $(2,2)$ of $n=312$ ROM of $\texttt{MNA\_2}$}
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.5}{MNA2_FR_5_15.png}
+
+\putfig{1}{MNA2_surf_5_15.png}
+\caption{\label{fig:MNA2_5_15} $(5,15)$ of $n=312$ ROM of $\texttt{MNA\_2}$}
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.5}{MNA2_FR_8_10.png}
+
+\putfig{1}{MNA2_surf_8_10.png}
+\caption{\label{fig:MNA2_8_10} $(8,10)$ of $n=312$ ROM of  $\texttt{MNA\_2}$}
+\end{figure}
+
+\begin{figure}
+\centering
+\putfig{.8}{MNA2_poles1.png}
+
+\putfig{.7}{MNA2_poles2.png}
+\caption{\label{fig:MNA2_poles} Explicit poles of the $n=312$ ROM of $\texttt{MNA\_2}$. Color indicates degree of convergence (relative-residual error).  The second plot is a ``zoom-in'' of the first, where we only show poles near the segment of interest.  Note no zeros are indicated.  Krylov-subspace methods have no simple way to determine zeros, as far as we know.  The first plot includes the interpolation points, and a circle indicating distance to the first pole.  The ``circles'' appear elongated due to scaling.}
+\end{figure}
+
+
+
+
+
+
+\chapter{Conclusion}
+In this document we have provided the theoretical background for a thick-restarted band-Arnoldi process for multi-input multi-output model order-reduction.  In the results section we showed that such a restarted method has potential to be developed into a viable model-reduction method.   Unfortunately we ran out of time before we could do in-depth analysis and extensive testing and comparison with comparable methods,  but we feel there is potential for further research and practical application of the method.   
+
+We developed a library of Matlab functions that implement the method and produce all of the results included in this document.    At the core is an  implementation of the band-Arnoldi algorithm of \cite{AN}, which was provided by Prof. R.W. Freund.    All of it is available upon request; in fact we would love to see this work developed further.    One natural extension of our method would be to implement an implicit-restart scheme using something akin to the Krylov-Schur method of \cite{stewart2002krylov}.    In order to do this over changing interpolation-points while preserving natural deflation, one would need to translate Ritz-residual vectors from one Krylov-subspace to another.  The translation provided in  \S\ref{sec:subspace _translation} was introduced for that purpose, although we think a theory of continuous interpolation-point translation could also be developed out of that discussion.   
+
+Another promising avenue of exploration would be the basis ``realification'' technique via real-inner product  discussed in \S\ref{sec:eqreal_discussion}.   We have only touched the surface of it here.  Realification is a topic in pure-algebra. T. Palmer discusses properties of realified spaces in \cite{palmer2001banach}.
+ 

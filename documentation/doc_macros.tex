@@ -1,0 +1,150 @@
+% !TeX root = diss.tex
+
+\usepackage{mathtools,amssymb,amsthm,braket,bm}
+\usepackage{verbatim,subfig,graphicx,datetime,color,colortbl}
+\usepackage{makerobust}
+   	\MakeRobustCommand\subref
+\usepackage[section]{placeins}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+
+\usepackage{yfonts}   % this is for those fancy drop caps
+
+\usepackage[ocgcolorlinks,backref,breaklinks]{hyperref} %  hyperref should be last
+
+
+% macros and other settings for my documents
+
+
+% these variables set a penalty for breaking in-line a math formula 
+%  across lines.  We set it higher to prevent that, since it is annoying.
+\relpenalty=5000    % defaults to 500
+\binoppenalty=7000  % defaults to 700
+\usdate  % format for \today
+\settimeformat{ampmtime}
+\numberwithin{equation}{section}  % this puts section in equation numbers
+
+
+
+% General text macros
+\newcommand{\pade}{Pad\'e}  
+
+%% General math notation
+\newcommand{\lsup}[2]{\vphantom{#2}^{#1}#2} % left superscript
+\newcommand{\R}{\mathbb{R}}  			% real numbers 
+\newcommand{\C}{\mathbb{C}}   			% complex numbers 
+\DeclareMathOperator*{\spn}{span}
+\DeclareMathOperator*{\bA}{\textbf{bArnoldi}}
+\DeclareMathOperator*{\argmin}{arg\,min}      
+\newcommand{\mat}[1]{\begin{bmatrix} #1\end{bmatrix}} % general matrix macro
+\newcommand{\nrm}[2]{\left\| #2 \right\|_{#1}}  % norm ||.||
+\newcommand{\cn}[2]{\left\| #2 \right\|_{#1}^\flat}  % column-wise norms ||.||
+\newcommand{\ipr}[2]{\left< #1,#2 \right>}   % inner product
+\newcommand{\conj}[1]{\overline{#1}}           % conjugate
+\renewcommand{\c}[1]{#1^H} 	% Hermitian conjugate 
+\newcommand{\krylov}[3]{\mathcal{K}_{#1}({#2},{#3})}  %Krylov subspace
+\newcommand{\bigO}[1]{\mathcal{O}\left( #1 \right)}
+\newcommand{\Lapl}{\mathcal{L}}	              % Laplace operator
+\newcommand{\K}{\mathcal{K}}  % general subspace (Krylov)
+\newcommand{\Q}{\mathcal{Q}}  % general subspace (Schur)
+\renewcommand{\P}{\mathcal{P}}    % Projection operator 
+\newcommand{\Pk}{\P_\K}    % Projection operator 
+\DeclareMathOperator*{\nnz}{nnz}
+
+\newcommand{\verbo}[1]{\begin{singlespacing}\begin{verbatim} {#1} \end{verbatim}\end{singlespacing}} 
+
+
+\newcommand{\vt}{\widetilde{v}}  % nice modifiers for general basis vector v.     
+\newcommand{\Vt}{\widetilde{V}}     
+\newcommand{\vtr}{\widetilde{v}^\textbf{r}}
+\newcommand{\vti}{\widetilde{v}^\textbf{i}}
+
+\newcommand{\Vh}{\hat{V}}
+\newcommand{\vh}{\hat{v}}
+\newcommand{\Vd}{\dot{V}}
+\newcommand{\vd}{\dot{v}}
+
+\newcommand{\Vdh}{\widehat{\dot{V}}}
+
+\newcommand{\dtol}{\text{dtol}}   % deflation tolerance
+\newcommand{\defl}{\text{defl}}   % deflation tolerance
+
+\newcommand{\Y}{\mathcal{Y}}  % space of previously discovered invariant    		    
+\newcommand{\Yh}{\hat{Y}}    % basis for the residual-space
+\newcommand{\nYh}{\nu}
+\newcommand{\yh}{\hat{y}}
+
+
+
+
+
+%% LTI system variable names 
+\newcommand{\nin}{m}  % number of inputs to the model
+\newcommand{\nout}{p}  % number of outputs to the model
+\newcommand{\npol}{q}  % number of finite poles of the system
+\newcommand{\LTI}{\mathcal{S}}   % LTI system operator
+\newcommand{\M}{\mathcal{M}}           	% Diagonal matrix, eigenvalues of (A,E)
+\newcommand{\tf}{\mathcal{H}}           	% Transfer function
+\newcommand{\wt}{\gamma} 		    % pole weight
+\newcommand{\A}{\bm{A}}    % System matrix A
+\newcommand{\E}{\bm{E}}    % Descriptor matrix E
+\newcommand{\BB}{\bm{B}}   % Input/Controllability condition B 
+\newcommand{\Bb}{\bm{b}}    %  vector form of b
+\newcommand{\CC}{\bm{C}}    % Output/Observability condition C 
+\newcommand{\Cc}{\bm{c}}    % vector form of C
+
+%% URM Transfer function specific
+\renewcommand{\H}{\textbf{\textup{H}}}     % shift-invert operator 
+\newcommand{\RR}{\textbf{\textup{R}}}     % shift-invert start block
+\newcommand{\Rr}{\textbf{\textup{r}}}     
+\newcommand{\mo}[1]{\tf^{(#1)}}       % transfer function moment
+
+
+%%  ROM specific notation
+\newcommand{\xp}{\sigma}  % expansion (interpolation) point
+\newcommand{\tfexp}{\widehat{\tf}}           	% ROM Transfer function (explicit projection)
+\newcommand{\Hexp}{\widehat{\H}}             % implied shift-invert operator for explicit ROM transfer function
+\newcommand{\rrexp}{\widehat{\boldsymbol{\rho}}}   %  explicit ROM analog to \RR and \Rr 
+\newcommand{\moexp}[1]{\tfexp^{(#1)}}     % explicit ROM transfer function moment
+\newcommand{\tfimp}{\widetilde{\tf}}             % ROM Transfer function (implicit projection)
+\newcommand{\Himp}{\widetilde{\H}}             % projected shift-invert operator (Arnoldi matrix)
+\newcommand{\rrimp}{\widetilde{\boldsymbol{\rho}}}  %  implicit ROM analog to \RR and \Rr 
+\newcommand{\moimp}[1]{\tfimp^{(#1)}}     % implicit ROM transfer function moment
+\newcommand{\bd}{l}  						% block degree of block-Krylov subspace about some point
+
+\newcommand{\Vrom}{V_\text{ROM}} 
+
+%% Multi-point (rational) notation
+\newcommand{\s}{\sigma}  		   % shift in multi-point method
+\newcommand{\np}{\tau}      		   % number of shifts
+
+
+
+\newcommand{\nblock}{\eta}     		 	% dimension of nth block-Krylov space 
+\newcommand{\F}{\mathcal{E}}   		% General matrix sized error term 
+\newcommand{\e}{\varepsilon}   	
+
+%% Equivalent-real (realified) form notation
+\newcommand{\nsplit}{\eta}   % dimension of block-PCC-Krylov space 
+\newcommand{\tp}[2]{#1^{\mathrm{\bf{t}}}_{#2}}
+\newcommand{\bt}[2]{#1^{\mathrm{\bf{b}}}_{#2}}
+\newcommand{\rp}[2]{#1^{\mathrm{\bf{r}}}_{#2}}
+\newcommand{\ip}[2]{#1^{\mathrm{\bf{i}}}_{#2}}
+\newcommand{\Heq}{{\ddot{\H}}} 
+\newcommand{\Req}{{\ddot{\RR}}}
+\newcommand{\req}{\ddot{\Rr}}
+
+\newcommand{\Heqimp}{\boldsymbol{G}}
+\newcommand{\Veq}{\ddot{V}}
+\newcommand{\veq}{\ddot{v}}
+
+
+\newcommand{\Keq}{\widehat{K}}
+\newcommand{\heq}{\hat{h}}
+\newcommand{\nblockeq}{\hat{\eta}}  % dimension of nth block-Krylov space induced by eq real forms
+\newcommand{\Vhat}{\widehat{V}}
+
+\newcommand{\V}{\widetilde{V}}   % the set (matrix) of split/real vectors
+
+
+
+

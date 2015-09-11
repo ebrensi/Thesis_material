@@ -1,0 +1,404 @@
+% !TeX root = doc.tex
+
+
+\section{Proofs and other supplementary information}
+
+\subsection{Equivalent real Arnoldi is cheaper than complex Arnoldi}
+\label{sec:eqrealcheaper}
+When speaking of a complex vector $x+iy$ ($x,y\in\R$) and its real-equivalent form,
+we make the identification
+\[
+	 x+iy \in \C^N \quad\leftrightarrow\quad \mat{x\\y}\in\R^{2N}.
+\]
+Observe that for two complex vectors $x+iy$ and  $a+ib$,
+their euclidean inner product is computed as
+\begin{equation}
+	(x+iy)^H(a+ib) = x^T a + y^T b + i(x^T b - y^T a) \quad \in \C,
+\label{eq:eucl_ip}
+\end{equation}
+which requires 4 real SAXPYs. The inner product of the same
+vectors two in equivalent-real form is computed as
+\begin{equation}
+  	\mat{x\\y}^T \mat{a\\b} = x^T a + y^T b \quad \in \R,
+\label{eq:split_ip}
+\end{equation}
+and uses 2 SAXPYs. Computing a complex basis in equivalent-real form via
+Gram-Schmidt procedure requires only half the operations of computing
+a basis using complex arithmetic.
+
+The inner products \eqref{eq:eucl_ip} and \eqref{eq:split_ip} yield
+different notions of orthogonality of a complex basis
+and its equivalent-real counterpart, and ultimately incompatible spaces.  The inner product
+\eqref{eq:split_ip} implies a weaker orthogonality than \eqref{eq:eucl_ip}:
+if two complex vectors $v,w\in\C^N$ are orthogonal then it follows that their
+equivalent real forms $\hat{v},\hat{w}\in\R^{2N}$ are also orthogonal, but the converse
+is not true in general.
+A basis $\Veq$ of the block-Krylov subspace $\krylov{n}{\Heq}{\Req}$ cannot be
+identified with a basis of $\krylov{n}{\H}{\RR}$:  if
+we express each basis vector $\veq_j$ as a complex vector
+\[
+v_j = \tp{\veq}^{(j)} + i\bt{\veq}^{(j)},
+\]
+the resulting set of complex vectors $\{v_j\}$ will generally neither be orthogonal,
+nor will it span $\krylov{n}{\H}{\RR}$.  However, for double shifting we are not interested
+in $\krylov{n}{\H}{\RR}$, but rather its PCC space $\krylov{n}{\H}{\RR}^*$,
+which is why the results of Sec.~\ref{sec:equivbases} are remarkable.
+
+The norms implied
+by the inner product for a complex vector $v\in\C^N$ and its equivalent real form $\veq\in\R^{2N}$ are equal:
+\[
+\nrm{}{\veq} = \nrm{}{v}\in\R.
+\]
+
+
+
+\subsection{Equivalence of PCC spaces obtained via complex and equivalent-real formulation}
+\label{sec:equivbases}
+\begin{lemma}\label{lem:eqspaces}
+Given $\H\in \C^{N\times N}$, $R\in\C^{N\times \nin}$, we denote the equivalent-real
+formulations of $\H$ and $R$ as $\Heq\in\R^{2N \times 2N}$ and $\Req\in\R^{2N\times\nin}$.  Then
+the PCC-Krylov subspaces induced by each pair are the same.
+	\begin{equation}
+	   	\krylov{n}{\Heq}{\Req}^* = \krylov{n}{\H}{\RR}^*
+	\end{equation}
+\end{lemma}
+
+\begin{proof}
+It is sufficient to show that $\Heq^j \Req$ is the
+equivalent real formulation of $\H^j R$ for any integer $j\geq 0$.
+Trivially for $j=0$ we have $\Req := \mat{\Re(R) \\ \Im(R)}$.
+For $j\geq 1$, let $K = \H^{j-1} R$. Then $\Keq = \mat{\Re(K)\\ \Im(K)}$
+is the equivalent-real form of $K = \Re(K) + i\Im(K)$, so
+ \begin{equation*}
+ \Heq^j \Req  = \Heq\Keq = \mat{\Re(\H) & -\Im(\H)\\ \Im(\H) & \Re(\H) }\mat{\Re(K) \\ \Im(K)}
+ = \mat{\Re(\H)\Re(K) - \Im(\H)\Im(K) \\ \Re(\H)\Im(K) + \Im(\H)\Re(K) }
+ \end{equation*}
+is the equivalent real formulation of
+
+\begin{equation*}
+\H^j R = \H K = (\Re(\H) + i \Im(\H))(\Re(K) + i\Im(K))
+ = \left( \Re(\H)\Re(K) - \Im(\H)\Im(K) \right) +
+	i\left(\Re(\H)\Im(K) + \Im(\H)\Re(K)  \right)
+\end{equation*}
+
+\end{proof}
+
+
+\bigskip
+
+\bigskip
+The next results establish that the basis vectors produced by an iteration
+of the Arnoldi process advance the PCC-Krylov subspace in the same order,
+regardless of whether we use complex or equivalent-real formulation.
+We first show this for the case that $R=r$ is a single vector ($p=1$), and
+it follows for the general block case ($p\geq 1$) via corollary.
+
+
+\begin{theorem} \label{thm:eqbases}Take $\H$, $r$ and their equivalent-real
+formulations $\Heq$ and $\req$.  Let
+$V_n$ be the ordered set of vectors output from $n$ Arnoldi iterations of $\H$
+on start vector $r$,
+and let $\Veq_n$ be the vectors produced by Arnoldi iterations using $\Heq$ and $\req$.
+Then there exist real scalars $\alpha, \beta$ and real
+$w,z\in \spn{\V_n}=\krylov{n}{\H}{r}^*$ such that
+	\begin{equation}
+	   	\Re(v_n) = \alpha\tp{\veq}^{(n)} + w \qquad\text{and }\qquad
+		 \Im(v_n) = \beta\bt{\veq}^{(n)} + z,
+     \label{eq:equ_bases}
+	\end{equation}
+where $w_0=z_0=0$.
+	
+\end{theorem}
+
+\begin{proof}
+For $n=1$ we have $v_1 = r/\nrm{}{r}$, and $\veq_1 = \req / \nrm{}{r}$, so $\Re(v_1) = \tp{\veq}^{(1)}$ and
+$\Im(v_1) = \bt{\veq}^{(1)}$, trivially satisfying \eqref{eq:equ_bases}.
+
+Noting that $\spn{V_n}=\krylov{n}{\H}{r}\subseteq \krylov{n}{\H}{r}^*$, for $n\geq 1$,
+the Arnoldi process computes scalars $h_{n+1,n}\in\R$ and $\{h_{ij}\}\subset\C$ such
+that
+	\begin{align*}
+	h_{n+1,n}v_{n+1} &= \H v_{n} - \sum_{j=1}^{n} h_{jn} v_j \\
+	 &= \H^{n}r + \sum_{j=1}^{n} c_j v_j, \qquad c_j\in\C\\
+	 &= \H^{n}r + \sum_{j=1}^{\nblocksplit} d_j\vt_j, \qquad d_j\in\C\\
+	 &= \H^{n}r + w_1 + iz_1, \qquad w_1,z_1\in\krylov{n}{\H}{r}^* \cap \R^N.
+	\end{align*}
+Applying Lemma~\ref{lem:eqspaces}, in equivalent real
+form:
+\begin{equation}
+h_{n+1,n}\mat{\Re(v_{n+1})\\ \Im(v_{n+1}}) = \Heq^{n}\req + \mat{w_1\\z_1}
+\label{eq:cplx_prog}
+\end{equation}
+
+Similarly,
+$n$ Arnoldi iterations with $\Heq$ and $\req$ yield
+\begin{equation}
+\heq_{n+1,n}\mat{\tp{\veq}^{(n+1)}\\ \bt{\veq}^{(n+1)}} =
+\heq_{n+1,n}\veq_{n} =
+ \Heq^{n}\req + \sum_{j=1}^{n} \hat{c}_j\veq_j
+= \Heq^{n}\req + \sum_{j=1}^{\nblocksplit} \mat{\hat{a}_j\vt_j \\ \hat{b}_j\vt_j}
+= \Heq^{n}\req + \mat{w_2 \\ z_2},
+\label{eq:eqreal_prog}
+\end{equation}
+where $\hat{c}_j\in\C$, $\hat{a}_j,\hat{b}_j\in\R$, and $w_2,z_2\in\krylov{n}{\H}{r}^* \cap \R^N$.
+
+\smallskip
+Then \eqref{eq:equ_bases} follows from
+\eqref{eq:cplx_prog} and \eqref{eq:eqreal_prog}.
+\end{proof}
+
+Theorem~\ref{thm:eqbases} establishes that Arnoldi vectors generated using $\Heq$ and $\req$
+yield basis vectors for $\krylov{n}{\H}{r}^*$ in the same order as those obtained from $\H$ and $r$;
+in fact, up to finite precision error they yield exactly the same basis.
+
+\begin{corollary}
+Something analagous to the result of Theorem~\ref{thm:eqbases}, except for a start block $R$ instead
+of a single vector $r$.  Not sure how to state this.
+\end{corollary}
+
+\begin{proof}
+Proof here.
+\end{proof}
+
+
+\subsection{Ritz vectors from Equivalent Real Arnoldi process}
+As discussed in Section~\ref{sec:eqreal}, a $n$ iterations of the Band-Arnoldi process with
+$\Heq\in\R^{2N \times 2N}$ and starting block $\Req\in\R^{2N \times \nin}$ yield
+the basis $\Veq_n\in\R^{2N \times \nblockeq}$ of the Krylov subspace $\krylov{n}{\Heq}{\Req}$,
+and the Arnoldi matrix $\Heq_n=\Veq_n^T \Heq \Veq_n\in\R^{\nblockeq \times \nblockeq}$.
+We illustrate two ways to extract information about convergence of the ROM implied thus far,
+via  approximate poles.
+
+\subsubsection{Via explicit projection}
+Explicit projection in general was introduced in Section~\ref{sec:explicitprojection}.
+Here, we re-hash it in more detail and and with respect
+to the realified (equivalent-real) formulations of section~\ref{sec:makingrealV}.
+A ROM obtained via explicit projection is simply the original matrices $A$,$E$, and $B$
+determining the unreduced model, projected on to a suitable subspace of $\R^N$,
+which in our case is the PCC-Krylov subspace $\krylov{n}{\H}{\RR}^*$.
+From $\Veq_n$ we obtain $\V_n\in\R^{N \times \nblocksplit}$, an orthonormal basis for the PCC-Krylov
+subspace $\krylov{n}{\H}{\RR}^*$ (see Section~\ref{sec:eqreal}, and note
+that $n\leq\nblocksplit\leq 2n\nin$).
+
+
+\begin{equation*}
+          A_n := \V_n^TA\V_n, \quad E_n := \V_n^TE\V_n, \quad B_n := \V_n^TB.
+  \label{}
+\end{equation*}
+The implied ROM transfer function has the familiar format
+ \begin{equation*}
+     H_n(s) = B_n^T\left(sE_n-A_n\right)^{-1}B_n.
+    \tag{\ref{eq:rm_proj}}
+ \end{equation*}
+Poles of \eqref{eq:rm_proj} are values $\rpol\in\C$ such that $\nrm{}{H_n(\rpol)}=\infty$, i.e.
+generalized eigenvalues of the matrix pencil $sE_n-A_n$.  These  poles approximate those
+of the unreduced model transfer function, and thus convergence of these Ritz-values
+(approximate eigenvalues) is an indicator of the quality of the ROM.
+There are $\nblocksplit$ of these eigenvalues and they come in complex conjugate pairs,
+yielding essentially $\nblocksplit / 2$ uniquely determined values.
+
+An eigenpair $(\rpol,w)$ of $sE_n-A_n$, satisfies the \emph{Galerkin} condition
+$\V_n^T(\rpol E - A)z=0$, for Ritz-vector $z=\V_n w$.
+Our measure of convergence of $(\rpol,z)$ is the explicitly computed relative residual error
+  \begin{equation*}
+      \mathrm{rr_{proj}} = \frac{\nrm{}{\rpol Ez - Az}}{\nrm{}{Az}}.
+  \end{equation*}
+
+
+\begin{figure}[htbp]
+	\centering
+	\subfloat[]{\putfig{.48}{rrproj50_308s_1.png}}\hfill
+	\subfloat[\label{fig:tfadj}]{\putfig{.48}{tfuncproj50_308s_1.png}}
+	\caption{Relative residual error (determined via explicit projection)
+	 after $n=50$ iterations on example data set
+	 $\mathtt{ex308s_1}$ with $\xp=10^9\pi(.5+i)$.  Convergence tolerance of $10^{-5}$
+	 suggests $7$ conjugate pairs of converged Ritz-values.  \subref{fig:tfadj}
+	 is the corresponding transfer function, computed via \eqref{eq:rm_proj}.
+ 	}
+	\label{fig:rrproj308s1w50}
+\end{figure}
+
+
+
+\subsubsection{Via eigenvalues of Arnoldi matrix}
+For this method, we use both Arnoldi matrix $\Heq_n$ and $\Veq_n$.
+Given that $\H$ is diagonalizable as  $\H = X\Lambda X^{-1}$ (we consider its
+Jordan-normal form if not),  the equivalent-real formulation
+$\Heq$ can be factored \cite[Proposition 5.1]{AN} as
+\begin{equation}
+Y^{-1}\Heq Y = \mat{\Lambda& 0\\0&\conj{\Lambda}} \quad\text{where}\quad
+Y = \frac{1}{\sqrt{2}}\mat{X&-i\conj{X}\\-iX&\conj{X}}
+.
+\label{eq:eqrealeigstruct}
+\end{equation}
+
+This gives the following relationships between eigenvalues/vectors of $\H$
+and $\Heq$:
+\begin{itemize}
+	\item[(i)] $\sigma(\Heq) = \sigma(\H) \cup \sigma(\conj{\H})$
+	\item[(ii)] For an eigenpair $(\lambda,x)$ of $\H$, it follows that  $(\lambda,y)$ and
+		$(\conj{\lambda},\conj{y})$ are eigenpairs of $\Heq$, where $y=\mat{x \\-ix}$.
+	\item[(iii)] For an eigenpair $(\lambda,y)$ of $\Heq$, there exists a unique
+	$x\in\C^N$ such that either
+	\[  y = \mat{x\\-ix}, \quad \lambda \in\sigma(\H), \qquad\text{or}\qquad
+		y = \mat{-i\conj{x}\\ \conj{x}},\quad  \lambda \in\sigma(\conj{\H}).
+	\]
+		and incidentally $x$ is an eigenvector of $\H$.
+\end{itemize}
+For simplicity of notation we have omitted the $1/\sqrt{2}$ factor, but it is necessary
+to preserve the unit property of the eigenvectors,
+i.e. $\nrm{2}{x}=1 \Leftrightarrow \nrm{2}{y}=1$.
+
+The Arnoldi process with $\Heq$ and starting block $\Req$ provides us with
+ Arnoldi (``Hessenberg'') matrix $\Heq_n$, and Arnoldi vectors $\Veq_n$.
+Eigenvalue decomposition of $\Heq_n$ yields Ritz-values (approximate eigenvalues)
+$\reig\in\sigma(\Heq_n)$
+of $\Heq$ each of which is an approximate eigenvalue
+either of $\H$ or of $\conj{\H}$,
+and eigenspace $W$ such that $Z=\Veq_n W$ is an approximate eiegenspace of
+$\Heq$.  We want to approximate $\sigma(\H)$, but it is not
+immediately apparent if a Ritz-value $\reig$ is an approximate eigenvalue of $\H$ or of
+$\conj{\H}$. Solution of the following minimization problem allows us to distinguish the
+Ritz-values:
+In light of \eqref{eq:eqrealeigstruct} we determine the approximate
+eigenspace
+\begin{equation}
+\widetilde{X} = f(Z) := \argmin_X\left\| Z - \frac{1}{\sqrt{2}}\mat{X\\-iX} \right\|
+= \frac{1}{\sqrt{2}}\left(\tp{Z}+i\bt{Z}\right)
+\label{eq:minslvX}
+\end{equation}
+of $\H$. Next, we consider the \emph{structurally-correct} variation of $Z$,
+\begin{equation}
+ 	Z_{\text{alt}} = g(Z) := \frac{1}{\sqrt{2}}\mat{\widetilde{X}\\-i\widetilde{X}}
+ 	 = \frac{1}{\sqrt{2}}\mat{f(Z)\\-if(Z)}
+ 	= \frac{1}{2}(Z+i\mat{\bt{Z}\\ -\tp{Z}})
+ 	.
+ \label{eq:Zalt}
+\end{equation}
+
+\eqref{eq:minslvX} and \eqref{eq:Zalt} provide alternatives
+to relative residual as a measure of Ritz-vector convergence, as well as a simple
+way to determine whether a Ritz-value $\reig$ of $\Heq$ is associated with $\H$,
+or with $\conj{\H}$. Our numerical experiments did not show $Z_{\text{alt}}$ to be a
+better approximation than $Z$, in general.
+
+
+
+\subsubsection{Convergence criteria for Arnoldi matrix eigenvalues}
+Consider $f$, defined
+in \eqref{eq:minslvX}.  For an exact eigen-pair $(\lambda, y)$ of $\Heq$
+where $\lambda\in\sigma(\H)$, we have that
+that $y=\mat{x&-ix}^T$, where $(\lambda,x)$ is the corresponding
+exact eigen-pair of $\H$.
+Then $f(y) = x$, and $f(\conj{y})=0$, or using \eqref{eq:Zalt}, we have $y_\text{alt}=g(y)=y$
+and $g(\conj{y})=0$.
+Thus, for a Ritz-pair $(\reig,z)$ of $\Heq$, we can expect that
+\emph{form-error} $\nrm{2}{z-z_{\text{alt}}}\approx 0$
+ only if $\reig$ is sufficiently converged, \emph{and} it is
+an approximate eigenvalue of $\H$. Combining \eqref{eq:minslvX} and \eqref{eq:Zalt}
+and assuming $\nrm{2}{z}=1$,
+\begin{align*}
+4\nrm{2}{z-z_\text{alt}}^2 &= \nrm{2}{\tp{z}-i\bt{z}}^2 + \nrm{2}{\tp{z}-i\bt{z}}^2 \\
+&= (\tp{z}-i\bt{z})^H(\tp{z}-i\bt{z}) +(\tp{z}-i\bt{z})^H(\tp{z}-i\bt{z})\\
+&= 2+4\operatorname{Im}(\tp{z}^H\bt{z}).
+\end{align*}
+
+ In summary, for $z_\text{alt}=g(z)$ and $\widetilde{x}=f(z)$,
+ \begin{equation}
+ 0\quad\leq\quad \nrm{2}{z-z_\text{alt}}^2 		 \quad=\quad
+ \frac{1}{2}+ \operatorname{Im}(\tp{z}^H\bt{z})  \quad=\quad
+ 1 - \nrm{2}{\widetilde{x}}^2 \quad\leq\quad 1
+ \label{eq:formerr}
+ \end{equation}
+where
+\[
+\operatorname{Im}(\tp{z}^H\bt{z})=
+\mat{-\operatorname{Im}{\tp{z}} \\ \operatorname{Re}{\tp{z}}}^T \mat{\operatorname{Re}{\bt{z}} \\ \operatorname{Im}{\bt{z}}},
+\]
+may present an ideal measure of convergence for Ritz-values of $\Heq$, and thus for poles of
+the ROM transfer function determined via equivalent-real formulation.
+
+ For a Ritz-pair $(\reig,z)$ of realified operator $\Heq$
+($z=\Veq_n w$, where $(\reig,w)$ is an eigenpair of Arnoldi matrix $\Heq_n$),
+we specify the relative-residual error, in general, as
+\begin{equation*}
+      \mathrm{rr} = \frac{\nrm{}{\Heq z-\reig z}}{\nrm{}{\reig z}}.
+\end{equation*}
+We compute two estimates of relative residual error:
+\begin{itemize}
+\item Via the Arnoldi relation, so that
+$\Heq \Veq_n w = \reig \Veq_n w + \eta \veq_{n+1} e_n^{T} w$
+implies
+	 \begin{equation*}
+	      \mathrm{rr_{arnoldi}} =  \frac{\nrm{2}{\Heq z-\reig z}}{\nrm{2}{\reig z}}
+	      = \frac{\vert \eta(e_n^{T} w)\vert \nrm{2}{\veq_{n+1}}}{\vert \reig\vert\nrm{2}{z}}
+	      = \left\vert\frac{\eta w_{n}}{\reig}\right\vert
+      \end{equation*}
+
+\item $\mathrm{rr_{explicit}}$, by explicitly computing $\Heq z$ and $\reig z$.  (This is
+computationally impractical with typical applications, but we do it with our examples, for
+comparison purposes.)
+\end{itemize}
+	
+The infinity norm $\nrm{\infty}{z}=\max_j\|z_j \|$ can also be used and may be more efficient
+to compute, but for the sake of simplicity we do not consider it here.
+
+Different measures of convergence for the same Ritz-values are compared in
+figure~\ref{fig:rrhess308s1w50}.
+For every example that we have tried, the values indicate
+roughly the same number of converged values/pairs for a given convergence tolerance.
+The form-error for the eigenvalue represented in the $14$-th position
+of figure~\ref{fig:rrhess308s1w50} is exactly $0$ (and is thus missing from the plot),
+although relative residual errors indicate
+that the Ritz/eigenvalue is not exact.  This suggests that it is possible for a Ritz-vector
+to be of the correct form $\mat{x &-ix}^T$ given by \eqref{eq:eqrealeigstruct}, and yet
+not be an eigenvector of $\Heq$,  i.e. the converse of \cite[Proposition 5.1]{AN}
+does not hold.
+	
+\begin{figure}[htbp]
+	\centering
+	\putfig{.70}{rrhess50_308s_1.png}
+	\caption{Relative residual error (determined via Arnoldi relation and explicitly computed)
+	 and form-error squared $\nrm{2}{z-z_\textrm{alt}}^2$
+	 of eigenvalues of $\Heq$ after $50$ iterations on example data set
+	 $\mathtt{ex308s_1}$ with $\xp=10^9\pi(.5+i)$.
+	 %Also, an alternate form error \texttt{relZdiff} given by $\nrm{\infty}{z-z_\textrm{alt}} / \nrm{\infty}{z}$.
+	 Relative residual errors do not distinguish Ritz values
+	 $\lambda$ and $\conj{\lambda}$ of $\Heq$, but form error does. Using the convergence tolerance
+	 $10^{-5}$, residual error formulation determines $11$ converged eigenvalues (in conjugate pairs),
+	 so that form-error is directly comparable to relative residual.
+	 The form-error for the $14$-th position is not plotted because it
+	 was computed to be exactly $0$.
+	%The below figure is identical except that form error is not squared ($\nrm{2}{z-z_\textrm{alt}}$).
+	}
+	\label{fig:rrhess308s1w50}
+\end{figure}
+
+\subsubsection{Equivalent-real `single-matrix' formulation of transfer function }
+The transfer function of the unreduced model is expressed in single matrix formulation
+(section~\ref{sec:singlematrix}) and as a Taylor expansion (section~\ref{sec:pade})
+\begin{align}
+     H(s) &= B^T\left(I-(s-\xp)\H\right)^{-1}R \tag{\ref{eq:tfunc_single_matrix}}\\
+     &= \sum_{j=0}^\infty (s-\xp )^jB^T\H^jR \tag{\ref{eq:neumann}}.
+\end{align}
+
+For equivalent-real forms $\Heq$ and $\Req$, we have
+\[
+	\Heq^j \Req = \textrm{eqreal}(\H^j R)
+	:= \mat{\operatorname{Re}\H^j R \\ \operatorname{Im}\H^j R}
+\]
+for integer $j\geq 0$
+(see proof of Lemma~\ref{lem:eqspaces} in section~\ref{sec:equivbases}),
+so for $\Beq:=\mat{B\\-iB}$ it follows that $\Beq^H\Heq^j \Req = B^T\H^j R$.
+Thus, the transfer function is defined equivalently as
+\begin{equation}
+     H(s) = \Beq^H\left(I-(s-\xp)\Heq\right)^{-1}\Req
+   \label{eq:eq_real_tfunc_single_matrix}
+\end{equation}
+(here, the identity $I\in\R^{2N \times 2N}$).
+
+A ROM  matching $n$-moments about $\xp$, has
+\begin{align*}
+   H(s) &= \sum_{j=0}^n (s-\xp )^jB^T\H^jR + \bigO{(s-\xp )^{n+1}}\\
+   &= \sum_{j=0}^n (s-\xp )^j\Beq^T\Heq^j\Req + \bigO{(s-\xp )^{n+1}}.
+\end{align*}
